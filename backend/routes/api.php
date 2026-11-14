@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AdminProductController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\HeroSlideController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -18,49 +19,17 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Categories
-Route::get(
-    '/categories',
-    [CategoryController::class, 'index']
-);
+Route::get('/categories', [CategoryController::class, 'index']);
 
 // Products
-Route::get(
-    '/products',
-    [ProductController::class, 'index']
-);
+Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/{slug}', [ProductController::class, 'show']);
 
-Route::get(
-    '/products/{slug}',
-    [ProductController::class, 'show']
-);
+// Search
+Route::get('/search', [SearchController::class, 'index']);
 
-/*
-|--------------------------------------------------------------------------
-| Search
-|--------------------------------------------------------------------------
-|
-| Public autocomplete endpoint used by the store search bar.
-| Example:
-| /api/search?q=matt
-|
-*/
-
-Route::get(
-    '/search',
-    [SearchController::class, 'index']
-);
-
-/*
-|--------------------------------------------------------------------------
-| Homepage Hero Slides
-|--------------------------------------------------------------------------
-*/
-
-// Public homepage highlights
-Route::get(
-    '/hero-slides',
-    [HeroSlideController::class, 'index']
-);
+// Homepage hero slides
+Route::get('/hero-slides', [HeroSlideController::class, 'index']);
 
 /*
 |--------------------------------------------------------------------------
@@ -68,23 +37,54 @@ Route::get(
 |--------------------------------------------------------------------------
 */
 
-// Create an order
+Route::post('/orders', [OrderController::class, 'store']);
+Route::get('/orders/customer', [OrderController::class, 'customerOrders']);
+Route::get('/orders/{orderNumber}', [OrderController::class, 'show']);
+
+/*
+|--------------------------------------------------------------------------
+| Gateway-independent Payments
+|--------------------------------------------------------------------------
+|
+| Payment initialization and verification use POST requests.
+|
+| This allows guest authorization tokens to be submitted
+| in the request body rather than URL query parameters.
+|
+| Actual payment processing remains disabled until a
+| supported gateway is fully integrated and configured.
+|
+| Webhook authenticity and transaction details must be
+| verified before updating any payment or order status.
+|
+*/
+
+// Initialize online payment
 Route::post(
-    '/orders',
-    [OrderController::class, 'store']
-);
+    '/payments/initialize',
+    [PaymentController::class, 'initialize']
+)->middleware('throttle:10,1');
 
-// Guest customer order lookup
-Route::get(
-    '/orders/customer',
-    [OrderController::class, 'customerOrders']
-);
+// Verify online payment
+Route::post(
+    '/payments/verify',
+    [PaymentController::class, 'verify']
+)->middleware('throttle:30,1');
 
-// View one order by order number
-Route::get(
-    '/orders/{orderNumber}',
-    [OrderController::class, 'show']
-);
+// Receive payment provider webhook
+Route::match(
+    ['get', 'post'],
+    '/payments/webhook/{provider}',
+    [PaymentController::class, 'webhook']
+)->whereIn('provider', ['flutterwave', 'pesapal']);
+
+// Pesapal customer return callback.
+// A redirect is not proof of payment.
+Route::get('/payments/callback/pesapal', function () {
+    return redirect()->away(
+        'http://localhost:3000/payment-return'
+    );
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -92,11 +92,7 @@ Route::get(
 |--------------------------------------------------------------------------
 */
 
-// Admin Login
-Route::post(
-    '/admin/login',
-    [AdminAuthController::class, 'login']
-);
+Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
 /*
 |--------------------------------------------------------------------------
@@ -106,118 +102,36 @@ Route::post(
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
+    Route::get('/admin/me', [AdminAuthController::class, 'me']);
 
-    Route::get(
-        '/admin/me',
-        [AdminAuthController::class, 'me']
-    );
+    Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
 
-    Route::post(
-        '/admin/logout',
-        [AdminAuthController::class, 'logout']
-    );
+    // Product management
+    Route::get('/admin/products', [AdminProductController::class, 'index']);
 
-    /*
-    |--------------------------------------------------------------------------
-    | Product Management
-    |--------------------------------------------------------------------------
-    */
+    Route::post('/admin/products', [AdminProductController::class, 'store']);
 
-    // View all products
-    Route::get(
-        '/admin/products',
-        [AdminProductController::class, 'index']
-    );
+    Route::get('/admin/products/{product}', [AdminProductController::class, 'show']);
 
-    // Create a new product
-    Route::post(
-        '/admin/products',
-        [AdminProductController::class, 'store']
-    );
+    Route::put('/admin/products/{product}', [AdminProductController::class, 'update']);
 
-    // View one product
-    Route::get(
-        '/admin/products/{product}',
-        [AdminProductController::class, 'show']
-    );
+    Route::delete('/admin/products/{product}', [AdminProductController::class, 'destroy']);
 
-    // Update an existing product
-    Route::put(
-        '/admin/products/{product}',
-        [AdminProductController::class, 'update']
-    );
+    // Order management
+    Route::get('/admin/orders', [AdminOrderController::class, 'index']);
 
-    // Delete a product
-    Route::delete(
-        '/admin/products/{product}',
-        [AdminProductController::class, 'destroy']
-    );
+    Route::get('/admin/orders/{order}', [AdminOrderController::class, 'show']);
 
-    /*
-    |--------------------------------------------------------------------------
-    | Order Management
-    |--------------------------------------------------------------------------
-    */
+    Route::put('/admin/orders/{order}', [AdminOrderController::class, 'update']);
 
-    // View all orders
-    Route::get(
-        '/admin/orders',
-        [AdminOrderController::class, 'index']
-    );
+    // Homepage hero slide management
+    Route::get('/admin/hero-slides', [AdminHeroSlideController::class, 'index']);
 
-    // View one order
-    Route::get(
-        '/admin/orders/{order}',
-        [AdminOrderController::class, 'show']
-    );
+    Route::post('/admin/hero-slides', [AdminHeroSlideController::class, 'store']);
 
-    // Update order status
-    Route::put(
-        '/admin/orders/{order}',
-        [AdminOrderController::class, 'update']
-    );
+    Route::get('/admin/hero-slides/{heroSlide}', [AdminHeroSlideController::class, 'show']);
 
-    /*
-    |--------------------------------------------------------------------------
-    | Homepage Hero Slide Management
-    |--------------------------------------------------------------------------
-    */
+    Route::post('/admin/hero-slides/{heroSlide}', [AdminHeroSlideController::class, 'update']);
 
-    // View all hero slides
-    Route::get(
-        '/admin/hero-slides',
-        [AdminHeroSlideController::class, 'index']
-    );
-
-    // Create a hero slide
-    Route::post(
-        '/admin/hero-slides',
-        [AdminHeroSlideController::class, 'store']
-    );
-
-    // View one hero slide
-    Route::get(
-        '/admin/hero-slides/{heroSlide}',
-        [AdminHeroSlideController::class, 'show']
-    );
-
-    // Update a hero slide
-    //
-    // POST is intentional because the admin form can upload
-    // a replacement image using multipart/form-data.
-    Route::post(
-        '/admin/hero-slides/{heroSlide}',
-        [AdminHeroSlideController::class, 'update']
-    );
-
-    // Delete a hero slide
-    Route::delete(
-        '/admin/hero-slides/{heroSlide}',
-        [AdminHeroSlideController::class, 'destroy']
-    );
+    Route::delete('/admin/hero-slides/{heroSlide}', [AdminHeroSlideController::class, 'destroy']);
 });

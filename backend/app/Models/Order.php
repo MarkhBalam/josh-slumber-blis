@@ -22,12 +22,19 @@ class Order extends Model
         'payment_status',
         'order_status',
 
+        // Secure guest payment authorization
+        'payment_access_token_hash',
+
         // Order tracking timestamps
         'confirmed_at',
         'out_for_delivery_at',
         'delivered_at',
         'cancelled_at',
         'paid_at',
+    ];
+
+    protected $hidden = [
+        'payment_access_token_hash',
     ];
 
     protected function casts(): array

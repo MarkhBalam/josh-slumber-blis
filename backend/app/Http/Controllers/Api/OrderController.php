@@ -33,7 +33,7 @@ class OrderController extends Controller
             'payment_method' => [
                 'required',
                 'string',
-                'in:mobile_money,momo_pay,bank_transfer,cash_on_delivery,pay_on_pickup',
+                'in:cash_on_delivery,mtn_mobile_money,airtel_money,card',
             ],
 
             'items' => ['required', 'array', 'min:1'],
@@ -51,7 +51,14 @@ class OrderController extends Controller
             ],
         ]);
 
-        $order = DB::transaction(function () use ($validated) {
+        // The raw token is only returned once to the checkout.
+        // Never store this raw value in the database.
+        $paymentAccessToken = bin2hex(random_bytes(32));
+
+        $order = DB::transaction(function () use (
+            $validated,
+            $paymentAccessToken
+        ) {
             $subtotal = 0;
             $preparedItems = [];
 
@@ -91,20 +98,6 @@ class OrderController extends Controller
             // Delivery is currently free within Uganda.
             $deliveryFee = 0;
 
-            /*
-            |--------------------------------------------------------------------------
-            | Normalize Customer Phone Number
-            |--------------------------------------------------------------------------
-            |
-            | New orders are stored in one consistent format.
-            |
-            | Example:
-            | 0706772881      -> 256706772881
-            | +256706772881   -> 256706772881
-            | 256706772881    -> 256706772881
-            |
-            */
-
             $phone = $this->normalizePhone(
                 $validated['phone']
             );
@@ -127,6 +120,11 @@ class OrderController extends Controller
                 'payment_method' => $validated['payment_method'],
                 'payment_status' => 'pending',
                 'order_status' => 'pending',
+
+                'payment_access_token_hash' => hash(
+                    'sha256',
+                    $paymentAccessToken
+                ),
             ]);
 
             $order->items()->createMany($preparedItems);
@@ -141,6 +139,10 @@ class OrderController extends Controller
             'success' => true,
             'message' => 'Order created successfully.',
             'data' => $order,
+
+            // Treat this like a password.
+            // The frontend must never place it in a URL.
+            'payment_access_token' => $paymentAccessToken,
         ], 201);
     }
 
@@ -148,12 +150,6 @@ class OrderController extends Controller
     |--------------------------------------------------------------------------
     | Guest Customer Orders
     |--------------------------------------------------------------------------
-    |
-    | Customers are currently checking out as guests.
-    |
-    | They can enter the same phone number they used during checkout
-    | to retrieve their orders.
-    |
     */
 
     public function customerOrders(
@@ -171,18 +167,7 @@ class OrderController extends Controller
             $validated['phone']
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | Phone Variations
-        |--------------------------------------------------------------------------
-        |
-        | Older orders may have been stored before phone normalization
-        | was introduced.
-        |
-        | Therefore we search the common Ugandan formats as well.
-        |
-        */
-
+        // Support older orders with different phone formats.
         $localPhone = $normalizedPhone;
 
         if (str_starts_with($normalizedPhone, '256')) {
@@ -274,24 +259,13 @@ class OrderController extends Controller
     private function normalizePhone(
         string $phone
     ): string {
-        /*
-        |--------------------------------------------------------------------------
-        | Remove spaces and other characters
-        |--------------------------------------------------------------------------
-        */
-
         $phone = preg_replace(
             '/\D+/',
             '',
             $phone
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | 07XXXXXXXX -> 2567XXXXXXXX
-        |--------------------------------------------------------------------------
-        */
-
+        // 07XXXXXXXX -> 2567XXXXXXXX
         if (
             strlen($phone) === 10 &&
             str_starts_with($phone, '0')
@@ -299,12 +273,7 @@ class OrderController extends Controller
             return '256' . substr($phone, 1);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | 7XXXXXXXX -> 2567XXXXXXXX
-        |--------------------------------------------------------------------------
-        */
-
+        // 7XXXXXXXX -> 2567XXXXXXXX
         if (
             strlen($phone) === 9 &&
             str_starts_with($phone, '7')
@@ -312,24 +281,13 @@ class OrderController extends Controller
             return '256' . $phone;
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Already 256XXXXXXXXX
-        |--------------------------------------------------------------------------
-        */
-
+        // Already in international format
         if (
             strlen($phone) === 12 &&
             str_starts_with($phone, '256')
         ) {
             return $phone;
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Return cleaned number as fallback
-        |--------------------------------------------------------------------------
-        */
 
         return $phone;
     }

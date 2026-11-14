@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 
 import { useCartStore } from "@/store/cartStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
+import {
+  clearPendingPayment,
+  getPendingPayment,
+  savePendingPayment,
+  type PendingPaymentSession,
+} from "@/lib/paymentSession";
 
 function formatPrice(price: number) {
   return `UGX ${price.toLocaleString("en-UG")}`;
@@ -26,24 +32,19 @@ const paymentMethods = [
     description: "Pay when your order is delivered.",
   },
   {
-    value: "mobile_money",
-    label: "Mobile Money",
-    description: "Pay using your preferred mobile money service.",
+    value: "mtn_mobile_money",
+    label: "MTN Mobile Money",
+    description: "Pay using your MTN MoMo wallet.",
   },
   {
-    value: "momo_pay",
-    label: "MoMo Pay",
-    description: "Complete payment using MoMo Pay.",
+    value: "airtel_money",
+    label: "Airtel Money",
+    description: "Pay using your Airtel Money wallet.",
   },
   {
-    value: "bank_transfer",
-    label: "Bank Transfer",
-    description: "Pay directly through a bank transfer.",
-  },
-  {
-    value: "pay_on_pickup",
-    label: "Pay on Pickup",
-    description: "Pay when collecting your order.",
+    value: "card",
+    label: "Visa / Mastercard",
+    description: "Pay securely with your debit or credit card.",
   },
 ];
 
@@ -109,6 +110,13 @@ export default function CheckoutPage() {
     (state) => state.setPaymentMethod
   );
 
+  // Old saved payment choices are treated as Cash on Delivery.
+  const selectedPaymentMethod = paymentMethods.some(
+    (method) => method.value === paymentMethod
+  )
+    ? paymentMethod
+    : "cash_on_delivery";
+
   const clearCheckout = useCheckoutStore(
     (state) => state.clearCheckout
   );
@@ -118,6 +126,12 @@ export default function CheckoutPage() {
 
   const [error, setError] =
     useState("");
+
+  const [conflictingPayment, setConflictingPayment] =
+    useState<PendingPaymentSession | null>(null);
+
+  const [confirmNewOrder, setConfirmNewOrder] =
+    useState(false);
 
   const totalItems = items.reduce(
     (total, item) => total + item.quantity,
@@ -143,67 +157,152 @@ export default function CheckoutPage() {
     setError("");
     setIsSubmitting(true);
 
-    try {
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/orders",
-        {
-          method: "POST",
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
+    const checkoutPayload = {
+      customer_name: customerName,
+      phone,
+      email: email || null,
+      delivery_address: deliveryAddress,
+      district: district || null,
+      delivery_notes: deliveryNotes || null,
+      payment_method: selectedPaymentMethod,
+      items: items.map((item) => ({
+        variant_id: item.variantId,
+        quantity: item.quantity,
+      })),
+    };
+
+    // Stable for this checkout, so retries reuse the same order.
+    const checkoutFingerprint = JSON.stringify({
+      ...checkoutPayload,
+      items: [...checkoutPayload.items].sort(
+        (a, b) => a.variant_id - b.variant_id
+      ),
+    });
+
+    try {
+      const existingPayment = getPendingPayment();
+
+      // Never create a new order while an earlier online order
+      // remains unresolved in this browser session.
+      if (
+        existingPayment &&
+        (selectedPaymentMethod === "cash_on_delivery" ||
+          existingPayment.checkoutFingerprint !== checkoutFingerprint)
+      ) {
+        setConflictingPayment(existingPayment);
+        setConfirmNewOrder(false);
+        throw new Error(
+          "You have an unfinished online payment for a different checkout. Choose an option below."
+        );
+      }
+
+      let orderNumber = existingPayment?.orderNumber;
+      let paymentAccessToken = existingPayment?.paymentAccessToken;
+
+      if (!existingPayment) {
+        const response = await fetch(`${apiUrl}/api/orders`, {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
+          body: JSON.stringify(checkoutPayload),
+        });
 
+        const data = await response.json();
+
+        if (!response.ok) {
+          const validationErrors = data.errors
+            ? Object.values(data.errors).flat().join(" ")
+            : null;
+
+          throw new Error(
+            validationErrors || data.message || "Failed to create order."
+          );
+        }
+
+        orderNumber = data?.data?.order_number;
+        paymentAccessToken = data?.payment_access_token;
+
+        if (!orderNumber || typeof orderNumber !== "string") {
+          throw new Error("The server did not return an order number.");
+        }
+
+        if (selectedPaymentMethod === "cash_on_delivery") {
+          clearCart();
+          clearCheckout();
+          router.push(
+            `/order-success?order=${encodeURIComponent(orderNumber)}`
+          );
+          return;
+        }
+
+        if (
+          typeof paymentAccessToken !== "string" ||
+          !/^[a-fA-F0-9]{64}$/.test(paymentAccessToken)
+        ) {
+          throw new Error(
+            "Order created, but payment authorization is missing. Contact support with your order number: " +
+              orderNumber
+          );
+        }
+
+        // Save before initialization: a failed or interrupted request
+        // must not create another order on the next submission.
+        savePendingPayment({
+          orderNumber,
+          paymentAccessToken,
+          checkoutFingerprint,
+        });
+      }
+
+      if (!orderNumber || !paymentAccessToken) {
+        throw new Error("Payment authorization is unavailable.");
+      }
+
+      const paymentResponse = await fetch(
+        `${apiUrl}/api/payments/initialize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           body: JSON.stringify({
-            customer_name: customerName,
-            phone,
-            email: email || null,
-
-            delivery_address: deliveryAddress,
-            district: district || null,
-            delivery_notes: deliveryNotes || null,
-
-            payment_method: paymentMethod,
-
-            items: items.map((item) => ({
-              variant_id: item.variantId,
-              quantity: item.quantity,
-            })),
+            order_number: orderNumber,
+            payment_access_token: paymentAccessToken,
           }),
         }
       );
 
-      const data = await response.json();
+      const paymentData = await paymentResponse.json();
 
-      if (!response.ok) {
-        const validationErrors = data.errors
-          ? Object.values(data.errors)
-              .flat()
-              .join(" ")
-          : null;
-
+      if (!paymentResponse.ok) {
         throw new Error(
-          validationErrors ||
-            data.message ||
-            "Failed to create order."
+          (paymentData?.message || "Could not initialize payment.") +
+            ` Your order number is ${orderNumber}.`
         );
       }
 
-      const orderNumber =
-        data.data.order_number;
+      const checkoutUrl = paymentData?.data?.checkout_url;
 
-      clearCart();
-      clearCheckout();
+      if (
+        typeof checkoutUrl !== "string" ||
+        !checkoutUrl.startsWith("https://")
+      ) {
+        throw new Error(
+          `The payment provider returned an invalid checkout URL. Your order number is ${orderNumber}.`
+        );
+      }
 
-      router.push(
-        `/order-success?order=${encodeURIComponent(
-          orderNumber
-        )}`
-      );
-    } catch (error) {
+      window.location.assign(checkoutUrl);
+    } catch (caught) {
       setError(
-        error instanceof Error
-          ? error.message
+        caught instanceof Error
+          ? caught.message
           : "Something went wrong while placing your order."
       );
     } finally {
@@ -285,7 +384,7 @@ export default function CheckoutPage() {
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:text-base">
             Enter your contact and delivery information,
-            then choose how you would like to pay.
+            then select your preferred payment method.
           </p>
         </div>
 
@@ -544,7 +643,7 @@ export default function CheckoutPage() {
                   </h2>
 
                   <p className="mt-0.5 text-xs text-text-muted">
-                    Choose how you would like to pay.
+                    Select your preferred payment method.
                   </p>
                 </div>
               </div>
@@ -552,13 +651,13 @@ export default function CheckoutPage() {
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 {paymentMethods.map((method) => {
                   const isSelected =
-                    paymentMethod === method.value;
+                    selectedPaymentMethod === method.value;
 
                   return (
                     <label
                       key={method.value}
                       className={[
-                        "relative cursor-pointer rounded-2xl border p-4 transition",
+                        "relative cursor-pointer rounded-2xl border p-4 pr-11 transition",
                         isSelected
                           ? "border-brand-navy bg-brand-navy text-white"
                           : "border-border-soft bg-background text-text-main hover:border-brand-navy",
@@ -615,10 +714,10 @@ export default function CheckoutPage() {
 
               <div className="mt-5 rounded-2xl border border-border-soft bg-background p-4">
                 <p className="text-xs leading-5 text-text-muted">
-                  Payment processing will be connected
-                  later. For now, your chosen payment
-                  method is saved with your order for
-                  confirmation.
+                  Cash on Delivery is available. For MTN Mobile Money,
+                  Airtel Money and Visa / Mastercard, you will be redirected
+                  to Pesapal's secure payment page. Online payments are
+                  currently running in sandbox test mode.
                 </p>
               </div>
             </section>
@@ -631,13 +730,135 @@ export default function CheckoutPage() {
                 className="rounded-2xl border border-danger/20 bg-danger/5 p-4 text-sm font-semibold leading-6 text-danger"
               >
                 <div className="flex gap-3">
-                  <span aria-hidden="true">
-                    !
-                  </span>
-
+                  <span aria-hidden="true">!</span>
                   <span>{error}</span>
                 </div>
               </div>
+            )}
+
+            {conflictingPayment && (
+              <section className="rounded-2xl border border-border-soft bg-surface p-5">
+                <h2 className="text-lg font-bold text-brand-navy">
+                  Unfinished Online Payment
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-text-muted">
+                  Previous order:{" "}
+                  <strong>{conflictingPayment.orderNumber}</strong>.
+                  You can return to its payment page or start a
+                  different order.
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={async () => {
+                      setError("");
+                      setIsSubmitting(true);
+
+                      try {
+                        const apiUrl =
+                          process.env.NEXT_PUBLIC_API_URL ||
+                          "http://127.0.0.1:8000";
+
+                        const response = await fetch(
+                          `${apiUrl}/api/payments/initialize`,
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Accept: "application/json",
+                            },
+                            body: JSON.stringify({
+                              order_number: conflictingPayment.orderNumber,
+                              payment_access_token:
+                                conflictingPayment.paymentAccessToken,
+                            }),
+                          }
+                        );
+
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                          throw new Error(
+                            data.message ||
+                              "Unable to resume the previous payment."
+                          );
+                        }
+
+                        const url = data?.data?.checkout_url;
+
+                        if (
+                          typeof url !== "string" ||
+                          !url.startsWith("https://")
+                        ) {
+                          throw new Error(
+                            "The payment provider did not return a valid checkout URL."
+                          );
+                        }
+
+                        window.location.assign(url);
+                      } catch (caught) {
+                        setError(
+                          caught instanceof Error
+                            ? caught.message
+                            : "Unable to resume payment."
+                        );
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }}
+                    className="rounded-full bg-brand-navy px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Resume Previous Payment
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => setConfirmNewOrder(true)}
+                    className="rounded-full border border-border-soft px-5 py-3 text-sm font-bold text-brand-navy disabled:opacity-50"
+                  >
+                    Start a New Order
+                  </button>
+                </div>
+
+                {confirmNewOrder && (
+                  <div className="mt-5 rounded-xl border border-danger/20 bg-danger/5 p-4">
+                    <p className="text-sm leading-6 text-text-main">
+                      <strong>Important:</strong> Starting a new order
+                      does not cancel your previous Pesapal payment.
+                      If you complete both payments, both orders may
+                      require attention. Only continue if you understand
+                      this.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearPendingPayment();
+                          setConflictingPayment(null);
+                          setConfirmNewOrder(false);
+                          setError("");
+                        }}
+                        className="rounded-full bg-brand-navy px-5 py-3 text-sm font-bold text-white"
+                      >
+                        I Understand, Continue
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setConfirmNewOrder(false)}
+                        className="rounded-full border border-border-soft px-5 py-3 text-sm font-semibold text-brand-navy"
+                      >
+                        Keep Previous Order
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
             )}
           </div>
 
@@ -793,7 +1014,9 @@ export default function CheckoutPage() {
                     Placing Order...
                   </span>
                 ) : (
-                  "Place Order"
+                  selectedPaymentMethod === "cash_on_delivery"
+                    ? "Place Order"
+                    : "Continue to Secure Payment"
                 )}
               </button>
 

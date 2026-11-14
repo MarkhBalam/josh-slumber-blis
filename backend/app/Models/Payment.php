@@ -14,6 +14,11 @@ class Payment extends Model
         'transaction_reference',
         'status',
         'paid_at',
+        'provider',
+        'provider_transaction_id',
+        'currency',
+        'verified_at',
+        'checkout_url',
     ];
 
     protected function casts(): array
@@ -21,6 +26,7 @@ class Payment extends Model
         return [
             'amount' => 'decimal:2',
             'paid_at' => 'datetime',
+            'verified_at' => 'datetime',
         ];
     }
 
