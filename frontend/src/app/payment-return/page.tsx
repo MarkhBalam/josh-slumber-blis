@@ -7,6 +7,7 @@ import {
   clearPendingPayment,
   getPendingPayment,
 } from "@/lib/paymentSession";
+import { useCartStore } from "@/store/cartStore";
 
 type PaymentStatus =
   | "checking"
@@ -29,6 +30,85 @@ export default function PaymentReturnPage() {
   const [status, setStatus] = useState<PaymentStatus>("checking");
   const [orderNumber, setOrderNumber] = useState("");
   const [message, setMessage] = useState("");
+  const [retrying, setRetrying] = useState(false);
+
+  const retryPayment = useCallback(async () => {
+    if (retrying || status !== "failed") return;
+
+    const payment = getPendingPayment();
+
+    if (!payment) {
+      setMessage(
+        "Your payment session is unavailable. Please check your order before attempting another payment."
+      );
+      return;
+    }
+
+    setRetrying(true);
+    setMessage("");
+
+    try {
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://127.0.0.1:8000";
+
+      const response = await fetch(
+        `${apiUrl}/api/payments/initialize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            order_number: payment.orderNumber,
+            payment_access_token: payment.paymentAccessToken,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const data: {
+        success?: boolean;
+        message?: string;
+        data?: {
+          provider?: string;
+          checkout_url?: string;
+          status?: string;
+        };
+      } = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message ||
+            "We could not safely start another payment. Please contact support."
+        );
+      }
+
+      if (
+        data.data?.provider !== "pesapal" ||
+        data.data?.status !== "pending" ||
+        typeof data.data.checkout_url !== "string"
+      ) {
+        throw new Error("The payment provider returned an invalid checkout session.");
+      }
+
+      const checkoutUrl = new URL(data.data.checkout_url);
+
+      if (checkoutUrl.protocol !== "https:") {
+        throw new Error("The payment checkout URL is not secure.");
+      }
+
+      window.location.assign(checkoutUrl.toString());
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "We could not start another payment. Please contact support."
+      );
+      setRetrying(false);
+    }
+  }, [retrying, status]);
 
   const verifyPayment = useCallback(async () => {
     const payment = getPendingPayment();
@@ -92,6 +172,61 @@ export default function PaymentReturnPage() {
       setStatus(verifiedStatus);
 
       if (verifiedStatus === "paid") {
+        let purchasedItems: {
+          variantId: number;
+          quantity: number;
+        }[] = [];
+
+        try {
+          const checkout: unknown = JSON.parse(
+            payment.checkoutFingerprint
+          );
+
+          if (
+            typeof checkout !== "object" ||
+            checkout === null ||
+            !("items" in checkout) ||
+            !Array.isArray(checkout.items)
+          ) {
+            throw new Error("Invalid checkout items.");
+          }
+
+          purchasedItems = checkout.items.map((item: unknown) => {
+            if (
+              typeof item !== "object" ||
+              item === null ||
+              !("variant_id" in item) ||
+              !("quantity" in item) ||
+              typeof item.variant_id !== "number" ||
+              typeof item.quantity !== "number" ||
+              !Number.isSafeInteger(item.variant_id) ||
+              item.variant_id <= 0 ||
+              !Number.isSafeInteger(item.quantity) ||
+              item.quantity <= 0
+            ) {
+              throw new Error("Invalid purchased item.");
+            }
+
+            return {
+              variantId: item.variant_id,
+              quantity: item.quantity,
+            };
+          });
+
+          if (purchasedItems.length === 0) {
+            throw new Error("No purchased items found.");
+          }
+        } catch {
+          setMessage(
+            "Payment confirmed, but we could not update your cart automatically."
+          );
+          return;
+        }
+
+        useCartStore
+          .getState()
+          .removePurchasedItems(payment.orderNumber, purchasedItems);
+
         clearPendingPayment();
       }
     } catch (error) {
@@ -205,12 +340,24 @@ export default function PaymentReturnPage() {
             />
           )}
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            {(status === "pending" || status === "unavailable") && (
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+            {status === "failed" && (
+              <button
+                type="button"
+                onClick={() => void retryPayment()}
+                disabled={retrying}
+                className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-full bg-brand-yellow px-7 font-bold text-brand-navy transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {retrying ? "Preparing Secure Checkout..." : "Retry Payment"}
+              </button>
+            )}
+
+            {(status === "pending" ||
+              (status === "unavailable" && getPendingPayment() !== null)) && (
               <button
                 type="button"
                 onClick={() => void verifyPayment()}
-                className="flex min-h-12 items-center justify-center rounded-full bg-brand-yellow px-7 font-bold text-brand-navy transition hover:brightness-95"
+                className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-full bg-brand-yellow px-7 font-bold text-brand-navy transition hover:brightness-95"
               >
                 Check Payment Again
               </button>
@@ -218,14 +365,14 @@ export default function PaymentReturnPage() {
 
             <Link
               href="/my-orders"
-              className="flex min-h-12 items-center justify-center rounded-full bg-brand-yellow px-7 font-bold text-brand-navy transition hover:brightness-95"
+              className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-full bg-brand-yellow px-7 font-bold text-brand-navy transition hover:brightness-95"
             >
               Track My Order
             </Link>
 
             <Link
               href="/"
-              className="flex min-h-12 items-center justify-center rounded-full border-2 border-brand-navy px-7 font-bold text-brand-navy transition hover:bg-brand-navy hover:text-white"
+              className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-full border-2 border-brand-navy px-7 font-bold text-brand-navy transition hover:bg-brand-navy hover:text-white"
             >
               Back to Home
             </Link>

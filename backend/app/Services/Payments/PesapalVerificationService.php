@@ -4,6 +4,7 @@ namespace App\Services\Payments;
 
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PaymentReconciliationAlert;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -78,7 +79,7 @@ class PesapalVerificationService
             );
         }
 
-        return DB::transaction(function () use (
+        $verification = DB::transaction(function () use (
             $payment,
             $providerStatus
         ) {
@@ -104,9 +105,12 @@ class PesapalVerificationService
 
             if ($lockedPayment->status === 'paid') {
                 if (in_array($providerStatus, ['failed', 'reversed'], true)) {
-                    throw new RuntimeException(
-                        'Previously paid transaction has conflicting provider status; manual reconciliation required.'
-                    );
+                    return [
+                        'status' => 'reconciliation_required',
+                        'reason' => 'previously_paid_status_conflict',
+                        'reported_status' => $providerStatus,
+                        'order_number' => $lockedOrder->order_number,
+                    ];
                 }
 
                 return [
@@ -120,9 +124,12 @@ class PesapalVerificationService
                     $lockedOrder->order_status === 'cancelled' ||
                     $lockedOrder->payment_status === 'paid'
                 ) {
-                    throw new RuntimeException(
-                        'Order requires payment reconciliation.'
-                    );
+                    return [
+                        'status' => 'reconciliation_required',
+                        'reason' => 'order_already_paid',
+                        'reported_status' => $providerStatus,
+                        'order_number' => $lockedOrder->order_number,
+                    ];
                 }
 
                 $now = now();
@@ -178,5 +185,29 @@ class PesapalVerificationService
                 'order_number' => $lockedOrder->order_number,
             ];
         });
+
+        if (($verification['status'] ?? null) === 'reconciliation_required') {
+            PaymentReconciliationAlert::firstOrCreate(
+                [
+                    'payment_id' => $payment->id,
+                    'reported_status' => $verification['reported_status'],
+                    'reason' => $verification['reason'],
+                ],
+                [
+                    'order_id' => $payment->order_id,
+                    'provider' => 'pesapal',
+                    'provider_transaction_id' => $payment->provider_transaction_id,
+                    'status' => 'open',
+                ]
+            );
+
+            throw new RuntimeException(
+                $verification['reason'] === 'previously_paid_status_conflict'
+                    ? 'Previously paid transaction has conflicting provider status; manual reconciliation required.'
+                    : 'Order requires payment reconciliation.'
+            );
+        }
+
+        return $verification;
     }
 }

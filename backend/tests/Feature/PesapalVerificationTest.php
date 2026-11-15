@@ -224,4 +224,153 @@ class PesapalVerificationTest extends TestCase
         $this->assertSame('paid', $payment->order->fresh()->payment_status);
     }
 
+
+    public function test_late_success_on_older_attempt_requires_reconciliation(): void
+    {
+        $olderPayment = $this->createTestPayment();
+        $order = $olderPayment->order;
+
+        $olderPayment->update([
+            'status' => 'failed',
+        ]);
+
+        $newerPayment = Payment::create([
+            'order_id' => $order->id,
+            'method' => 'mtn_mobile_money',
+            'amount' => 100000,
+            'transaction_reference' => 'JSB-TEST-REF-002',
+            'provider' => 'pesapal',
+            'provider_transaction_id' =>
+                '00000000-0000-4000-8000-000000000002',
+            'currency' => 'UGX',
+            'status' => 'pending',
+        ]);
+
+        $this->verifyWithResponse($newerPayment, 'paid');
+
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame('paid', $newerPayment->fresh()->status);
+
+        try {
+            $this->verifyWithResponse($olderPayment, 'paid');
+
+            $this->fail(
+                'Expected reconciliation exception for second successful payment.'
+            );
+        } catch (RuntimeException $exception) {
+            $this->assertSame(
+                'Order requires payment reconciliation.',
+                $exception->getMessage()
+            );
+        }
+
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame('paid', $newerPayment->fresh()->status);
+        $this->assertSame('failed', $olderPayment->fresh()->status);
+    }
+
+
+    public function test_late_success_creates_persistent_reconciliation_alert(): void
+    {
+        $olderPayment = $this->createTestPayment();
+        $order = $olderPayment->order;
+
+        $olderPayment->update(['status' => 'failed']);
+
+        $newerPayment = Payment::create([
+            'order_id' => $order->id,
+            'method' => 'mtn_mobile_money',
+            'amount' => 100000,
+            'transaction_reference' => 'JSB-TEST-REF-002',
+            'provider' => 'pesapal',
+            'provider_transaction_id' =>
+                '00000000-0000-4000-8000-000000000002',
+            'currency' => 'UGX',
+            'status' => 'pending',
+        ]);
+
+        $this->verifyWithResponse($newerPayment, 'paid');
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            try {
+                $this->verifyWithResponse($olderPayment, 'paid');
+                $this->fail('Expected reconciliation exception.');
+            } catch (RuntimeException $exception) {
+                $this->assertSame(
+                    'Order requires payment reconciliation.',
+                    $exception->getMessage()
+                );
+            }
+        }
+
+        $this->assertDatabaseHas('payment_reconciliation_alerts', [
+            'order_id' => $order->id,
+            'payment_id' => $olderPayment->id,
+            'provider' => 'pesapal',
+            'reported_status' => 'paid',
+            'reason' => 'order_already_paid',
+            'status' => 'open',
+        ]);
+
+        $this->assertDatabaseCount(
+            'payment_reconciliation_alerts',
+            1
+        );
+
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame('failed', $olderPayment->fresh()->status);
+    }
+
+
+    public function test_paid_status_conflicts_create_reconciliation_alerts(): void
+    {
+        foreach (['failed', 'reversed'] as $reportedStatus) {
+            if ($reportedStatus === 'reversed') {
+                Order::query()
+                    ->where('order_number', 'JSB-TEST-001')
+                    ->update(['order_number' => 'JSB-TEST-001-FAILED']);
+
+                Payment::query()
+                    ->where('transaction_reference', 'JSB-TEST-REF-001')
+                    ->update([
+                        'transaction_reference' => 'JSB-TEST-REF-001-FAILED',
+                        'provider_transaction_id' =>
+                            '00000000-0000-4000-8000-000000000003',
+                    ]);
+            }
+
+            $payment = $this->createTestPayment();
+
+            $this->verifyWithResponse($payment, 'paid');
+
+            try {
+                $this->verifyWithResponse($payment, $reportedStatus);
+                $this->fail('Expected reconciliation exception.');
+            } catch (RuntimeException $exception) {
+                $this->assertSame(
+                    'Previously paid transaction has conflicting provider status; manual reconciliation required.',
+                    $exception->getMessage()
+                );
+            }
+
+            $this->assertDatabaseHas('payment_reconciliation_alerts', [
+                'payment_id' => $payment->id,
+                'reported_status' => $reportedStatus,
+                'status' => 'open',
+            ]);
+
+            $this->assertSame('paid', $payment->fresh()->status);
+
+            $this->assertSame(
+                'paid',
+                $payment->order->fresh()->payment_status
+            );
+
+            $this->assertDatabaseCount(
+                'payment_reconciliation_alerts',
+                $reportedStatus === 'failed' ? 1 : 2
+            );
+        }
+    }
+
 }

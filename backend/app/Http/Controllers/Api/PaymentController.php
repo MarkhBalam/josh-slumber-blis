@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Payments\PaymentGatewayInterface;
 use App\Services\Payments\PaymentGatewayResolver;
+use App\Services\Payments\PesapalVerificationService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +20,8 @@ class PaymentController extends Controller
 {
     public function initialize(
         Request $request,
-        PaymentGatewayResolver $resolver
+        PaymentGatewayResolver $resolver,
+        PesapalVerificationService $verificationService
     ): JsonResponse {
         $validated = $request->validate([
             'order_number' => ['required', 'string'],
@@ -111,6 +114,120 @@ class PaymentController extends Controller
         }
 
         /*
+         * Coordinate initialization and retry reconciliation per order.
+         * Never hold a database transaction during Pesapal API calls.
+         */
+        $retryLock = Cache::lock(
+            'jsb:payment-initialize:' . $order->id,
+            120
+        );
+
+        if (! $retryLock->get()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A payment request is already being processed. Please try again shortly.',
+            ], 409);
+        }
+
+        try {
+            $hasOpenReconciliationAlert = \App\Models\PaymentReconciliationAlert::query()
+                ->where('order_id', $order->id)
+                ->where('status', 'open')
+                ->exists();
+
+            if ($hasOpenReconciliationAlert) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment requires manual reconciliation before another attempt.',
+                ], 409);
+            }
+
+            $previousAttempts = Payment::query()
+                ->where('order_id', $order->id)
+                ->where('provider', 'pesapal')
+                ->orderBy('id')
+                ->get();
+
+            $reusableCheckout = null;
+
+            foreach ($previousAttempts as $previous) {
+                if ($previous->status === 'paid') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A previous payment has already succeeded.',
+                    ], 409);
+                }
+
+                if (empty($previous->provider_transaction_id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'An earlier payment attempt cannot yet be reconciled.',
+                    ], 409);
+                }
+
+                try {
+                    $verification = $verificationService->verify($previous);
+                } catch (Throwable $exception) {
+                    Log::warning('Previous Pesapal attempt could not be reconciled.', [
+                        'order_id' => $order->id,
+                        'payment_id' => $previous->id,
+                        'error' => $exception->getMessage(),
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Previous payment status could not be confirmed. Please contact support before retrying.',
+                    ], 409);
+                }
+
+                if ($verification['status'] === 'pending') {
+                    if (
+                        $previous->status === 'pending' &&
+                        ! empty($previous->checkout_url)
+                    ) {
+                        $reusableCheckout = $previous;
+                        continue;
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A previous payment requires reconciliation before continuing.',
+                    ], 409);
+                }
+
+                if ($verification['status'] !== 'failed') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A previous payment is paid or requires reconciliation.',
+                    ], 409);
+                }
+            }
+
+            if ($reusableCheckout) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Existing checkout session retrieved.',
+                    'data' => [
+                        'provider' => 'pesapal',
+                        'checkout_url' => $reusableCheckout->checkout_url,
+                        'transaction_reference' =>
+                            $reusableCheckout->transaction_reference,
+                        'status' => 'pending',
+                    ],
+                ]);
+            }
+
+            return $this->reserveAndInitializePayment($order, $gateway);
+        } finally {
+            $retryLock->release();
+        }
+    }
+
+    private function reserveAndInitializePayment(
+        Order $order,
+        PaymentGatewayInterface $gateway
+    ): JsonResponse {
+        /*
          * Reserve a payment attempt under a database lock.
          * External HTTP calls are intentionally made after
          * the transaction has committed.
@@ -126,6 +243,15 @@ class PaymentController extends Controller
                 $lockedOrder->order_status === 'cancelled'
             ) {
                 return ['state' => 'blocked'];
+            }
+
+            $hasOpenAlert = \App\Models\PaymentReconciliationAlert::query()
+                ->where('order_id', $lockedOrder->id)
+                ->where('status', 'open')
+                ->exists();
+
+            if ($hasOpenAlert) {
+                return ['state' => 'reconciliation_required'];
             }
 
             $existing = Payment::query()
@@ -174,6 +300,13 @@ class PaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'This order cannot accept payment.',
+            ], 409);
+        }
+
+        if ($reservation['state'] === 'reconciliation_required') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment requires manual reconciliation before another attempt.',
             ], 409);
         }
 

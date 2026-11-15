@@ -9,26 +9,32 @@ export type CartItem = {
   variantLabel: string;
   price: number;
   quantity: number;
-
-  // Optional so older persisted cart items still work.
   imagePath?: string | null;
+};
+
+type PurchasedItem = {
+  variantId: number;
+  quantity: number;
 };
 
 type CartState = {
   items: CartItem[];
 
+  // Records orders whose cart cleanup has already been applied.
+  cleanedOrderNumbers: string[];
+
   addItem: (item: CartItem) => void;
-
   removeItem: (variantId: number) => void;
-
   increaseQuantity: (variantId: number) => void;
-
   decreaseQuantity: (variantId: number) => void;
-
   clearCart: () => void;
 
-  totalItems: () => number;
+  removePurchasedItems: (
+    orderNumber: string,
+    purchasedItems: PurchasedItem[]
+  ) => void;
 
+  totalItems: () => number;
   totalPrice: () => number;
 };
 
@@ -36,6 +42,7 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+      cleanedOrderNumbers: [],
 
       addItem: (item) =>
         set((state) => {
@@ -50,9 +57,6 @@ export const useCartStore = create<CartState>()(
                   ? {
                       ...cartItem,
                       quantity: cartItem.quantity + item.quantity,
-
-                      // If an older cart item has no image yet,
-                      // allow the new add-to-cart action to supply one.
                       imagePath:
                         cartItem.imagePath ??
                         item.imagePath ??
@@ -102,6 +106,55 @@ export const useCartStore = create<CartState>()(
         })),
 
       clearCart: () => set({ items: [] }),
+
+      removePurchasedItems: (orderNumber, purchasedItems) =>
+        set((state) => {
+          if (
+            !orderNumber.trim() ||
+            (state.cleanedOrderNumbers ?? []).includes(orderNumber)
+          ) {
+            return state;
+          }
+
+          const purchased = new Map<number, number>();
+
+          for (const item of purchasedItems) {
+            if (
+              !Number.isSafeInteger(item.variantId) ||
+              item.variantId <= 0 ||
+              !Number.isSafeInteger(item.quantity) ||
+              item.quantity <= 0
+            ) {
+              return state;
+            }
+
+            purchased.set(
+              item.variantId,
+              (purchased.get(item.variantId) ?? 0) + item.quantity
+            );
+          }
+
+          if (purchased.size === 0) {
+            return state;
+          }
+
+          return {
+            items: state.items
+              .map((item) => ({
+                ...item,
+                quantity:
+                  item.quantity -
+                  (purchased.get(item.variantId) ?? 0),
+              }))
+              .filter((item) => item.quantity > 0),
+
+            // Stored alongside the cart update in one Zustand state.
+            cleanedOrderNumbers: [
+              ...(state.cleanedOrderNumbers ?? []),
+              orderNumber,
+            ],
+          };
+        }),
 
       totalItems: () =>
         get().items.reduce(
