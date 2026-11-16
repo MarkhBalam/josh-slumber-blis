@@ -38,8 +38,16 @@ Route::get('/hero-slides', [HeroSlideController::class, 'index']);
 */
 
 Route::post('/orders', [OrderController::class, 'store']);
-Route::get('/orders/customer', [OrderController::class, 'customerOrders']);
-Route::get('/orders/{orderNumber}', [OrderController::class, 'show']);
+
+Route::post(
+    '/orders/customer',
+    [OrderController::class, 'customerOrders']
+)->middleware('throttle:10,1');
+
+Route::get(
+    '/orders/{orderNumber}',
+    [OrderController::class, 'show']
+)->middleware('throttle:10,1');
 
 /*
 |--------------------------------------------------------------------------

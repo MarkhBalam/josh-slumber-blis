@@ -148,35 +148,25 @@ class OrderController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | Guest Customer Orders
+    | Guest Customer Orders — Limited Public Tracking
     |--------------------------------------------------------------------------
     */
 
-    public function customerOrders(
-        Request $request
-    ): JsonResponse {
+    public function customerOrders(Request $request): JsonResponse
+    {
         $validated = $request->validate([
-            'phone' => [
-                'required',
-                'string',
-                'max:50',
-            ],
+            'phone' => ['required', 'string', 'max:50'],
         ]);
 
-        $normalizedPhone = $this->normalizePhone(
-            $validated['phone']
-        );
+        $normalizedPhone = $this->normalizePhone($validated['phone']);
 
-        // Support older orders with different phone formats.
         $localPhone = $normalizedPhone;
 
         if (str_starts_with($normalizedPhone, '256')) {
-            $localPhone =
-                '0' . substr($normalizedPhone, 3);
+            $localPhone = '0' . substr($normalizedPhone, 3);
         }
 
-        $internationalPhone =
-            '+' . $normalizedPhone;
+        $internationalPhone = '+' . $normalizedPhone;
 
         $orders = Order::query()
             ->where(function ($query) use (
@@ -189,23 +179,22 @@ class OrderController extends Controller
                     ->orWhere('phone', $localPhone)
                     ->orWhere('phone', $internationalPhone);
             })
-            ->with([
-                'items.product.images',
-                'items.variant',
-            ])
+            ->with(['items.product.images'])
             ->latest()
             ->get();
 
         return response()->json([
             'success' => true,
             'count' => $orders->count(),
-            'data' => $orders,
+            'data' => $orders->map(
+                fn (Order $order) => $this->trackingData($order)
+            ),
         ]);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Show One Order
+    | Show One Order — Limited Public Tracking
     |--------------------------------------------------------------------------
     */
 
@@ -213,17 +202,52 @@ class OrderController extends Controller
     {
         $order = Order::query()
             ->where('order_number', $orderNumber)
-            ->with([
-                'items.product.images',
-                'items.variant',
-                'payments',
-            ])
+            ->with(['items.product.images'])
             ->firstOrFail();
 
         return response()->json([
             'success' => true,
-            'data' => $order,
+            'data' => $this->trackingData($order),
         ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Explicitly Allowed Public Tracking Fields
+    |--------------------------------------------------------------------------
+    */
+
+    private function trackingData(Order $order): array
+    {
+        return [
+            'id' => $order->id,
+            'order_number' => $order->order_number,
+            'order_status' => $order->order_status,
+            'created_at' => $order->created_at,
+            'confirmed_at' => $order->confirmed_at,
+            'out_for_delivery_at' => $order->out_for_delivery_at,
+            'delivered_at' => $order->delivered_at,
+            'cancelled_at' => $order->cancelled_at,
+            'items' => $order->items->map(function ($item) {
+                $product = $item->product;
+
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product_name,
+                    'variant_name' => $item->variant_name,
+                    'quantity' => $item->quantity,
+                    'product' => $product ? [
+                        'slug' => $product->slug,
+                        'images' => $product->images->map(
+                            fn ($image) => [
+                                'image_path' => $image->image_path,
+                                'is_primary' => $image->is_primary,
+                            ]
+                        )->values()->all(),
+                    ] : null,
+                ];
+            })->values()->all(),
+        ];
     }
 
     /*
