@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 const API_URL =
@@ -188,6 +188,20 @@ export default function MyOrdersPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searched || error || loading) return;
+
+    const frame = requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [searched, error, loading]);
 
   const activeOrders = useMemo(
     () =>
@@ -317,7 +331,7 @@ export default function MyOrdersPage() {
         </div>
 
         {searched && !error && (
-          <div className="mt-10">
+          <div ref={resultsRef} className="mt-10 scroll-mt-6">
             {orders.length === 0 ? (
               <div className="rounded-3xl border border-border-soft bg-surface px-6 py-14 text-center">
                 <div className="text-5xl">📦</div>

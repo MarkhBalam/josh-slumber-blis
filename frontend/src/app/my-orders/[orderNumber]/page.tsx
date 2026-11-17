@@ -207,17 +207,17 @@ export default function CustomerOrderPage() {
         </Link>
 
         <section className="mt-6 overflow-hidden rounded-3xl bg-brand-navy text-white">
-          <div className="p-6 sm:p-8">
+          <div className="px-6 py-5 sm:px-8 sm:py-5">
             <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
               Delivery Tracking
             </p>
 
-            <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="break-all text-2xl font-bold sm:text-4xl">
+                <h1 className="break-all text-2xl font-bold sm:text-3xl">
                   {order.order_number}
                 </h1>
-                <p className="mt-3 text-sm text-white/70">
+                <p className="mt-2 text-sm text-white/70">
                   Placed {formatDate(order.created_at)}
                 </p>
               </div>
@@ -236,7 +236,7 @@ export default function CustomerOrderPage() {
             </div>
           </div>
 
-          <div className="border-t border-white/15 px-6 py-4 text-sm text-white/80 sm:px-8">
+          <div className="border-t border-white/15 px-6 py-3 text-sm text-white/80 sm:px-8">
             {totalItems} {totalItems === 1 ? "item" : "items"} in this order
           </div>
         </section>
@@ -285,55 +285,57 @@ export default function CustomerOrderPage() {
             </div>
           </div>
 
-          <div className="mt-9 space-y-0">
-            {STAGES.map((stage, index) => {
-              const complete = !cancelled && index <= currentIndex;
-              const current = !cancelled && index === currentIndex;
-              const date = stageDates[stage.key];
-              const last = index === STAGES.length - 1;
+          <div className="mt-6 md:mt-8">
+            <div className="relative hidden md:grid md:grid-cols-5 md:gap-3">
+              <div
+                aria-hidden="true"
+                className="absolute left-[10%] right-[10%] top-5 h-0.5 bg-border-soft"
+              >
+                <div
+                  className={`h-full ${cancelled ? "bg-danger" : "bg-brand-navy"}`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
 
-              return (
-                <div key={stage.key} className="flex gap-4">
-                  <div className="flex flex-col items-center">
+              {STAGES.map((stage, index) => {
+                const complete = !cancelled && index < currentIndex;
+                const current = !cancelled && index === currentIndex;
+                const date = stageDates[stage.key];
+
+                return (
+                  <div
+                    key={stage.key}
+                    className="relative flex min-w-0 flex-col items-center text-center"
+                  >
                     <div
-                      className={`z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                      className={`z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold ${
                         complete
                           ? "border-brand-navy bg-brand-navy text-brand-yellow"
-                          : "border-border-soft bg-background text-text-muted"
+                          : current
+                            ? "border-brand-yellow bg-brand-yellow text-brand-navy"
+                            : "border-border-soft bg-background text-text-muted"
                       }`}
                     >
-                      {complete ? "✓" : index + 1}
+                      {complete ? "✓" : current ? "●" : index + 1}
                     </div>
 
-                    {!last && (
-                      <div
-                        className={`min-h-16 w-0.5 flex-1 ${
-                          complete && index < currentIndex
-                            ? "bg-brand-navy"
-                            : "bg-border-soft"
-                        }`}
-                      />
+                    <h3
+                      className={`mt-3 text-sm font-bold ${
+                        complete || current
+                          ? "text-brand-navy"
+                          : "text-text-muted"
+                      }`}
+                    >
+                      {stage.label}
+                    </h3>
+
+                    {current && (
+                      <span className="mt-2 rounded-full bg-brand-yellow px-2.5 py-1 text-[10px] font-bold uppercase text-brand-navy">
+                        In Progress
+                      </span>
                     )}
-                  </div>
 
-                  <div className={`min-w-0 flex-1 ${last ? "" : "pb-8"}`}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3
-                        className={`font-bold ${
-                          complete ? "text-brand-navy" : "text-text-muted"
-                        }`}
-                      >
-                        {stage.label}
-                      </h3>
-
-                      {current && (
-                        <span className="rounded-full bg-brand-yellow px-2.5 py-1 text-[10px] font-bold uppercase text-brand-navy">
-                          Current
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-1 text-sm text-text-muted">
+                    <p className="mt-2 text-xs leading-5 text-text-muted">
                       {stage.description}
                     </p>
 
@@ -349,9 +351,88 @@ export default function CustomerOrderPage() {
                       </p>
                     )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            <div className="space-y-0 md:hidden">
+              {STAGES.map((stage, index) => {
+                const complete = !cancelled && index < currentIndex;
+                const current = !cancelled && index === currentIndex;
+                const date = stageDates[stage.key];
+                const last = index === STAGES.length - 1;
+
+                return (
+                  <div key={stage.key} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                          complete
+                            ? "border-brand-navy bg-brand-navy text-brand-yellow"
+                            : current
+                              ? "border-brand-yellow bg-brand-yellow text-brand-navy"
+                              : "border-border-soft bg-background text-text-muted"
+                        }`}
+                      >
+                        {complete ? "✓" : current ? "●" : index + 1}
+                      </div>
+
+                      {!last && (
+                        <div
+                          className={`min-h-12 w-0.5 flex-1 ${
+                            index < currentIndex && !cancelled
+                              ? "bg-brand-navy"
+                              : "bg-border-soft"
+                          }`}
+                        />
+                      )}
+                    </div>
+
+                    <div className={`min-w-0 flex-1 ${last ? "" : "pb-4"}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3
+                          className={`font-bold ${
+                            complete || current
+                              ? "text-brand-navy"
+                              : "text-text-muted"
+                          }`}
+                        >
+                          {stage.label}
+                        </h3>
+
+                        {current && (
+                          <span className="rounded-full bg-brand-yellow px-2.5 py-1 text-[10px] font-bold uppercase text-brand-navy">
+                            Current
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-1 text-sm text-text-muted">
+                        {stage.description}
+                      </p>
+
+                      {complete && date && (
+                        <p className="mt-2 text-xs font-semibold text-text-muted">
+                          {formatDate(date)}
+                        </p>
+                      )}
+
+                      {current && (
+                        <p className="mt-2 text-xs font-semibold text-brand-navy">
+                          In Progress
+                        </p>
+                      )}
+
+                      {complete && !date && (
+                        <p className="mt-2 text-xs font-semibold text-success">
+                          Completed
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {cancelled && order.cancelled_at && (
