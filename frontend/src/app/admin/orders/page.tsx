@@ -226,100 +226,64 @@ export default function AdminOrdersPage() {
     (order) => order.order_status === "delivered"
   ).length;
 
-  const totalRevenue = orders
-    .filter(
-      (order) =>
-        order.order_status !== "cancelled"
-    )
-    .reduce(
-      (total, order) =>
-        total + Number(order.total),
-      0
-    );
+  const paidOrderValue = orders
+    .filter((order) => order.payment_status === "paid")
+    .reduce((total, order) => total + Number(order.total), 0);
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
+    <main className="min-h-screen bg-background text-brand-navy">
       <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-5">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-500">
-              Josh Slumber Blis
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold">
-              Orders
-            </h1>
-
-            <p className="mt-2 text-gray-500">
-              View and manage customer orders.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/admin"
-              className="rounded-full border border-black px-5 py-2.5 text-sm font-semibold"
-            >
-              Dashboard
-            </Link>
-
-            <Link
-              href="/admin/products"
-              className="rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white"
-            >
-              Products
-            </Link>
-          </div>
+        <div>
+          <h1 className="text-3xl font-extrabold text-brand-navy">
+            Orders
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Review purchases, track fulfilment and manage customer orders.
+          </p>
         </div>
 
         {/* Stats */}
         {!loading && !error && (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-3xl border border-black/10 bg-white p-6">
-              <p className="text-sm text-gray-500">
-                Total Orders
-              </p>
-
-              <p className="mt-2 text-3xl font-bold">
-                {orders.length}
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-black/10 bg-white p-6">
-              <p className="text-sm text-gray-500">
-                Pending
-              </p>
-
-              <p className="mt-2 text-3xl font-bold">
-                {pendingOrders}
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-black/10 bg-white p-6">
-              <p className="text-sm text-gray-500">
-                Active
-              </p>
-
-              <p className="mt-2 text-3xl font-bold">
-                {activeOrders}
-              </p>
-            </div>
-
-            <div className="rounded-3xl bg-black p-6 text-white">
-              <p className="text-sm text-white/60">
-                Order Value
-              </p>
-
-              <p className="mt-2 text-2xl font-bold">
-                {formatPrice(totalRevenue)}
-              </p>
-
-              <p className="mt-2 text-xs text-white/50">
-                Excludes cancelled orders
-              </p>
-            </div>
-          </div>
+          <section className="mt-7 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            {[
+              {
+                label: "Total orders",
+                value: String(orders.length),
+                detail: "All customer orders",
+              },
+              {
+                label: "Pending orders",
+                value: String(pendingOrders),
+                detail: "Awaiting confirmation",
+              },
+              {
+                label: "Orders in progress",
+                value: String(activeOrders),
+                detail: "Being fulfilled",
+              },
+              {
+                label: "Paid order value",
+                value: formatPrice(paidOrderValue),
+                detail: "Confirmed paid orders",
+              },
+            ].map((metric) => (
+              <div
+                key={metric.label}
+                className="min-w-0 rounded-2xl border border-brand-navy/10 bg-white p-3 sm:p-5"
+              >
+                <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                  {metric.label}
+                </p>
+                <p className="mt-2 break-words text-xl font-extrabold tracking-tight text-brand-navy sm:mt-3 sm:text-2xl">
+                  {metric.value}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {metric.detail}
+                </p>
+              </div>
+            ))}
+          </section>
         )}
 
         {/* Loading */}
@@ -341,34 +305,50 @@ export default function AdminOrdersPage() {
         {!loading && !error && (
           <>
             {/* Filters */}
-            <div className="mt-10">
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-7 overflow-hidden rounded-2xl border border-brand-navy/10 bg-white">
+              <div className="flex gap-2 overflow-x-auto px-4 py-4 sm:flex-wrap sm:px-6">
                 {[
                   ["all", "All"],
                   ["pending", "Pending"],
                   ["confirmed", "Confirmed"],
                   ["processing", "Processing"],
-                  [
-                    "out_for_delivery",
-                    "Out for Delivery",
-                  ],
+                  ["out_for_delivery", "Out for Delivery"],
                   ["delivered", "Delivered"],
                   ["cancelled", "Cancelled"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setFilter(value)}
-                    className={[
-                      "rounded-full px-5 py-2.5 text-sm font-semibold transition",
-                      filter === value
-                        ? "bg-black text-white"
-                        : "border border-black/10 bg-white hover:border-black",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </button>
-                ))}
+                ].map(([value, label]) => {
+                  const count =
+                    value === "all"
+                      ? orders.length
+                      : orders.filter(
+                          (order) => order.order_status === value
+                        ).length;
+
+                  const active = filter === value;
+
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFilter(value)}
+                      className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                        active
+                          ? "bg-brand-navy text-white"
+                          : "bg-surface-soft text-brand-navy hover:bg-brand-navy/10"
+                      }`}
+                    >
+                      {label}
+                      <span
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                          active
+                            ? "bg-white/20 text-white"
+                            : "bg-white text-brand-navy"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -390,7 +370,7 @@ export default function AdminOrdersPage() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredOrders.map((order) => {
                     const itemQuantity =
                       order.items.reduce(
@@ -402,16 +382,16 @@ export default function AdminOrdersPage() {
                     return (
                       <article
                         key={order.id}
-                        className="overflow-hidden rounded-3xl border border-black/10 bg-white"
+                        className="overflow-hidden rounded-2xl border border-brand-navy/10 bg-white"
                       >
-                        <div className="grid gap-6 p-6 lg:grid-cols-[1.2fr_1fr_1fr_auto] lg:items-center">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-4 p-4 sm:p-5 lg:grid-cols-[1.2fr_1fr_1fr_auto] lg:items-center">
                           {/* Order */}
-                          <div>
+                          <div className="col-span-2 lg:col-span-1">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
                               Order
                             </p>
 
-                            <p className="mt-1 font-bold">
+                            <p className="mt-1 break-all font-bold text-brand-navy">
                               {order.order_number}
                             </p>
 
@@ -443,7 +423,7 @@ export default function AdminOrdersPage() {
                               Total
                             </p>
 
-                            <p className="mt-1 text-lg font-bold">
+                            <p className="mt-1 text-lg font-bold text-brand-navy">
                               {formatPrice(order.total)}
                             </p>
 
@@ -456,10 +436,10 @@ export default function AdminOrdersPage() {
                           </div>
 
                           {/* Action */}
-                          <div className="lg:text-right">
+                          <div className="col-span-2 lg:col-span-1 lg:text-right">
                             <Link
                               href={`/admin/orders/${order.id}`}
-                              className="inline-block rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white"
+                              className="inline-block rounded-xl bg-brand-navy px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                             >
                               View Order
                             </Link>
@@ -467,7 +447,7 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* Bottom Information */}
-                        <div className="flex flex-wrap items-center gap-3 border-t border-black/10 bg-[#fcfbf9] px-6 py-4">
+                        <div className="flex flex-wrap items-center gap-3 border-t border-brand-navy/10 bg-slate-50/70 px-4 py-3 sm:px-5">
                           <span
                             className={[
                               "rounded-full px-3 py-1.5 text-xs font-semibold",
@@ -531,7 +511,7 @@ export default function AdminOrdersPage() {
                 </div>
 
                 <p className="text-xl font-bold">
-                  {formatPrice(totalRevenue)}
+                  {formatPrice(paidOrderValue)}
                 </p>
               </div>
             )}

@@ -70,7 +70,7 @@ export default function AdminLoginPage() {
       <section className="w-full max-w-md rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-500">
-            Josh Slumber Blis
+            Josh Slumber Bliss
           </p>
 
           <h1 className="mt-3 text-3xl font-bold">

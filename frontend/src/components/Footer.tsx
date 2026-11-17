@@ -21,7 +21,7 @@ export default function Footer() {
                 <div className="w-[150px] sm:w-[175px]">
                   <img
                     src="/josh balam logo.png"
-                    alt="Josh Slumber Blis"
+                    alt="Josh Slumber Bliss"
                     className="h-auto w-full object-contain"
                   />
                 </div>

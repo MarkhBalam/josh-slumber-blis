@@ -459,33 +459,6 @@ export default function CreateProductPage() {
   |--------------------------------------------------------------------------
   */
 
-  function createVariant(): VariantForm {
-    if (variantKind === "mattress") {
-      return mattressVariant();
-    }
-
-    if (variantKind === "duvet") {
-      return duvetVariant();
-    }
-
-    return emptyVariant();
-  }
-
-  function addVariant() {
-    setVariants((current) => [
-      ...current,
-      createVariant(),
-    ]);
-  }
-
-  function removeVariant(index: number) {
-    setVariants((current) =>
-      current.filter(
-        (_, currentIndex) => currentIndex !== index
-      )
-    );
-  }
-
   function updateVariant(
     index: number,
     changes: Partial<VariantForm>
@@ -582,8 +555,8 @@ export default function CreateProductPage() {
       return;
     }
 
-    if (variants.length === 0) {
-      setError("Please add at least one product option.");
+    if (variants.length !== 1) {
+      setError("Each new product must have exactly one size or option.");
       return;
     }
 
@@ -821,28 +794,25 @@ export default function CreateProductPage() {
   */
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
-      <div className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
+    <main className="min-h-screen bg-background text-brand-navy">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Page Header */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-500">
-              Josh Slumber Blis
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Josh Slumber Bliss
             </p>
 
-            <h1 className="mt-2 text-4xl font-bold">
+            <h1 className="mt-2 text-2xl font-bold sm:text-3xl">
               Add Product
             </h1>
 
-            <p className="mt-2 max-w-2xl text-gray-500">
-              Choose the category first. The next options are loaded
-              automatically from the Josh Slumber Blis catalogue.
-            </p>
+
           </div>
 
           <Link
             href="/admin/products"
-            className="rounded-full border border-black px-5 py-2.5 text-sm font-semibold transition hover:bg-black hover:text-white"
+            className="rounded-xl border border-brand-navy px-5 py-2.5 text-sm font-semibold transition hover:bg-black hover:text-white"
           >
             ← Back to Products
           </Link>
@@ -850,10 +820,10 @@ export default function CreateProductPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="mt-10 space-y-8"
+          className="mt-6 space-y-5 sm:space-y-6"
         >
           {/* Catalogue */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-xl font-bold">
               Catalogue
             </h2>
@@ -876,7 +846,7 @@ export default function CreateProductPage() {
                   onChange={(event) =>
                     handleCategoryChange(event.target.value)
                   }
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
+                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-brand-navy"
                 >
                   <option value="">
                     {loadingCategories
@@ -908,7 +878,7 @@ export default function CreateProductPage() {
                     onChange={(event) =>
                       handleTypeChange(event.target.value)
                     }
-                    className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
+                    className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-brand-navy"
                   >
                     <option value="">
                       Select product type
@@ -936,7 +906,7 @@ export default function CreateProductPage() {
                         setCustomType(event.target.value)
                       }
                       placeholder="Enter custom product type"
-                      className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
+                      className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-navy"
                     />
                   )}
                 </div>
@@ -956,7 +926,7 @@ export default function CreateProductPage() {
                       onChange={(event) =>
                         handleProductChange(event.target.value)
                       }
-                      className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
+                      className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-brand-navy"
                     >
                       <option value="">
                         Select product
@@ -994,7 +964,7 @@ export default function CreateProductPage() {
                           setCustomProductName(event.target.value)
                         }
                         placeholder="Enter product name"
-                        className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
+                        className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-navy"
                       />
                     )}
                   </div>
@@ -1002,303 +972,17 @@ export default function CreateProductPage() {
             </div>
           </section>
 
-          {/* Product Details */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
-            <h2 className="text-xl font-bold">
-              Product Details
-            </h2>
-
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-semibold">
-                  Brand
-                </label>
-
-                <input
-                  type="text"
-                  value={brand}
-                  onChange={(event) =>
-                    setBrand(event.target.value)
-                  }
-                  placeholder="e.g. Rosefoam"
-                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold">
-                  Material
-                </label>
-
-                <input
-                  type="text"
-                  value={material}
-                  onChange={(event) =>
-                    setMaterial(event.target.value)
-                  }
-                  placeholder="Optional"
-                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
-                />
-              </div>
-
-              {variantKind === "mattress" && (
-                <div>
-                  <label className="text-sm font-semibold">
-                    Firmness
-                  </label>
-
-                  <select
-                    value={firmness}
-                    onChange={(event) =>
-                      setFirmness(event.target.value)
-                    }
-                    className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
-                  >
-                    <option value="">
-                      Not specified
-                    </option>
-
-                    {FIRMNESS_OPTIONS.map((option) => (
-                      <option
-                        key={option}
-                        value={option}
-                      >
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-
-                  {firmness === "Other / Custom" && (
-                    <input
-                      type="text"
-                      value={customFirmness}
-                      onChange={(event) =>
-                        setCustomFirmness(event.target.value)
-                      }
-                      placeholder="Enter firmness"
-                      className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Description */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
-            <h2 className="text-xl font-bold">
-              Description
-            </h2>
-
-            <div className="mt-6 space-y-5">
-              <div>
-                <label className="text-sm font-semibold">
-                  Short Description
-                </label>
-
-                <textarea
-                  rows={2}
-                  value={shortDescription}
-                  onChange={(event) =>
-                    setShortDescription(event.target.value)
-                  }
-                  placeholder="Short description shown on product cards."
-                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold">
-                  Full Description
-                </label>
-
-                <textarea
-                  rows={5}
-                  value={description}
-                  onChange={(event) =>
-                    setDescription(event.target.value)
-                  }
-                  placeholder="Full product information."
-                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-black"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Product Images */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">
-                  Product Images
-                </h2>
-
-                <p className="mt-2 text-sm text-gray-500">
-                  Upload up to 8 product photos. The first image will
-                  be used as the main product image.
-                </p>
-              </div>
-
-              <div className="rounded-full bg-[#f8f6f2] px-4 py-2 text-sm font-semibold">
-                {images.length} / 8 images
-              </div>
-            </div>
-
-            {/* Upload Area */}
-            {images.length < 8 && (
-              <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-black/15 bg-[#f8f6f2] px-6 py-10 text-center transition hover:border-black/40">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black text-xl text-white">
-                  +
-                </div>
-
-                <p className="mt-4 font-semibold">
-                  Add product photos
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  JPEG, PNG or WebP
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">
-                  You can select multiple photos at once.
-                </p>
-
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  onChange={(event) => {
-                    handleImageSelection(event.target.files);
-
-                    event.target.value = "";
-                  }}
-                  className="hidden"
-                />
-              </label>
-            )}
-
-            {/* Image Previews */}
-            {imagePreviews.length > 0 && (
-              <div className="mt-6">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold">
-                    Selected Photos
-                  </p>
-
-                  <p className="text-xs text-gray-400">
-                    Choose Make Primary to change the main product
-                    photo.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  {imagePreviews.map((preview, index) => (
-                    <div
-                      key={`${preview.file.name}-${preview.file.lastModified}-${index}`}
-                      className={[
-                        "overflow-hidden rounded-2xl border bg-white",
-                        index === 0
-                          ? "border-black"
-                          : "border-black/10",
-                      ].join(" ")}
-                    >
-                      {/* Preview */}
-                      <div className="relative aspect-square overflow-hidden bg-[#ece8e1]">
-                        <img
-                          src={preview.url}
-                          alt={`Product preview ${index + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-
-                        {index === 0 && (
-                          <div className="absolute left-3 top-3 rounded-full bg-black px-3 py-1.5 text-xs font-bold text-white shadow">
-                            Primary
-                          </div>
-                        )}
-
-                        <div className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold shadow">
-                          {index + 1}
-                        </div>
-                      </div>
-
-                      {/* Image Information */}
-                      <div className="p-4">
-                        <p
-                          className="truncate text-sm font-semibold"
-                          title={preview.file.name}
-                        >
-                          {preview.file.name}
-                        </p>
-
-                        <p className="mt-1 text-xs text-gray-400">
-                          {(preview.file.size / 1024 / 1024).toFixed(2)}{" "}
-                          MB
-                        </p>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {index !== 0 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                makePrimaryImage(index)
-                              }
-                              className="rounded-full border border-black/15 px-3 py-2 text-xs font-semibold transition hover:border-black"
-                            >
-                              Make Primary
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {images.length === 0 && (
-              <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                No product photos selected yet.
-              </div>
-            )}
-
-            {/* Maximum */}
-            {images.length === 8 && (
-              <div className="mt-5 rounded-2xl bg-[#f8f6f2] px-4 py-3 text-sm text-gray-600">
-                Maximum of 8 product photos reached. Remove a photo
-                if you want to replace it.
-              </div>
-            )}
-          </section>
-
-          {/* Options & Prices */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
+          {/* Prices & Sizes */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold">
-                  Options & Prices
+                  Prices & Sizes
                 </h2>
 
-                <p className="mt-2 text-sm text-gray-500">
-                  Add the available options and their selling prices.
-                </p>
+
               </div>
 
-              <button
-                type="button"
-                onClick={addVariant}
-                className="rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white"
-              >
-                + Add Another Option
-              </button>
             </div>
 
             <div className="mt-6 space-y-5">
@@ -1309,18 +993,8 @@ export default function CreateProductPage() {
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold">
-                      Option {index + 1}
+                      Product Size / Option
                     </h3>
-
-                    {variants.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeVariant(index)}
-                        className="text-sm font-semibold text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    )}
                   </div>
 
                   {/* Mattress */}
@@ -1477,13 +1151,189 @@ export default function CreateProductPage() {
             </div>
           </section>
 
+          {/* Description */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="text-xl font-bold">
+              Description
+            </h2>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold">
+                  Product Description
+                </label>
+
+                <textarea
+                  rows={5}
+                  value={description}
+                  onChange={(event) =>
+                    setDescription(event.target.value)
+                  }
+                  placeholder="Describe the product, its features, materials, and benefits."
+                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-navy"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Product Images */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">
+                  Product Images
+                </h2>
+
+
+              </div>
+
+              <div className="rounded-full bg-[#f8f6f2] px-4 py-2 text-sm font-semibold">
+                {images.length} / 8 images
+              </div>
+            </div>
+
+            {/* Upload Area */}
+            {images.length < 8 && (
+              <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-black/15 bg-[#f8f6f2] px-6 py-6 text-center transition hover:border-black/40">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-navy text-xl text-white">
+                  +
+                </div>
+
+                <p className="mt-4 font-semibold">
+                  Add product photos
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  JPEG, PNG or WebP
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  You can select multiple photos at once.
+                </p>
+
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={(event) => {
+                    handleImageSelection(event.target.files);
+
+                    event.target.value = "";
+                  }}
+                  className="hidden"
+                />
+              </label>
+            )}
+
+            {/* Image Previews */}
+            {imagePreviews.length > 0 && (
+              <div className="mt-6">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">
+                    Selected Photos
+                  </p>
+
+                  <p className="text-xs text-gray-400">
+                    Choose Make Primary to change the main product
+                    photo.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {imagePreviews.map((preview, index) => (
+                    <div
+                      key={`${preview.file.name}-${preview.file.lastModified}-${index}`}
+                      className={[
+                        "overflow-hidden rounded-2xl border bg-white",
+                        index === 0
+                          ? "border-black"
+                          : "border-black/10",
+                      ].join(" ")}
+                    >
+                      {/* Preview */}
+                      <div className="relative aspect-square overflow-hidden bg-[#ece8e1]">
+                        <img
+                          src={preview.url}
+                          alt={`Product preview ${index + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+
+                        {index === 0 && (
+                          <div className="absolute left-3 top-3 rounded-xl bg-brand-navy px-3 py-1.5 text-xs font-bold text-white shadow">
+                            Primary
+                          </div>
+                        )}
+
+                        <div className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold shadow">
+                          {index + 1}
+                        </div>
+                      </div>
+
+                      {/* Image Information */}
+                      <div className="p-4">
+                        <p
+                          className="truncate text-sm font-semibold"
+                          title={preview.file.name}
+                        >
+                          {preview.file.name}
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          {(preview.file.size / 1024 / 1024).toFixed(2)}{" "}
+                          MB
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {index !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                makePrimaryImage(index)
+                              }
+                              className="rounded-xl border border-brand-navy/15 px-3 py-2 text-xs font-semibold transition hover:border-black"
+                            >
+                              Make Primary
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {images.length === 0 && (
+              <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                No product photos selected yet.
+              </div>
+            )}
+
+            {/* Maximum */}
+            {images.length === 8 && (
+              <div className="mt-5 rounded-2xl bg-[#f8f6f2] px-4 py-3 text-sm text-gray-600">
+                Maximum of 8 product photos reached. Remove a photo
+                if you want to replace it.
+              </div>
+            )}
+          </section>
+
           {/* Product Visibility */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-xl font-bold">
               Product Visibility
             </h2>
 
-            <div className="mt-6 space-y-4">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <label className="flex cursor-pointer gap-3 rounded-2xl border border-black/10 p-4">
                 <input
                   type="radio"
@@ -1525,7 +1375,7 @@ export default function CreateProductPage() {
                 </div>
               </label>
 
-              <label className="flex items-center gap-3 pt-2 font-semibold">
+              <label className="flex items-center gap-3 pt-2 font-semibold sm:col-span-2">
                 <input
                   type="checkbox"
                   checked={isFeatured}
@@ -1550,7 +1400,7 @@ export default function CreateProductPage() {
           <div className="flex flex-wrap justify-end gap-4">
             <Link
               href="/admin/products"
-              className="rounded-full border border-black px-7 py-3.5 font-semibold transition hover:bg-black hover:text-white"
+              className="rounded-xl border border-brand-navy px-7 py-3.5 font-semibold transition hover:bg-black hover:text-white"
             >
               Cancel
             </Link>
@@ -1558,7 +1408,7 @@ export default function CreateProductPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-full bg-black px-8 py-3.5 font-semibold text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-brand-navy px-8 py-3.5 font-semibold text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting
                 ? "Creating Product..."

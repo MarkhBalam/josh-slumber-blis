@@ -342,7 +342,6 @@ export default function AdminOrderDetailPage() {
 
           body: JSON.stringify({
             order_status: orderStatus,
-            payment_status: paymentStatus,
           }),
         }
       );
@@ -394,6 +393,109 @@ export default function AdminOrderDetailPage() {
     }
   }
 
+  async function handleCollectPayment() {
+    if (
+      !order ||
+      order.payment_method !== "cash_on_delivery" ||
+      order.payment_status !== "pending" ||
+      order.order_status === "cancelled"
+    ) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Confirm that UGX ${Number(order.total).toLocaleString("en-UG")} has actually been received in cash for order ${order.order_number}?`
+      )
+    ) {
+      return;
+    }
+
+    const token = localStorage.getItem(
+      "josh-slumber-blis-admin-token"
+    );
+
+    if (!token) {
+      router.replace("/admin/login");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `${API_URL}/api/admin/orders/${order.id}/collect-payment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            confirm_collected: true,
+          }),
+        }
+      );
+
+      if (response.status === 401) {
+        localStorage.removeItem("josh-slumber-blis-admin-token");
+        localStorage.removeItem("josh-slumber-blis-admin-user");
+        router.replace("/admin/login");
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const validationErrors = data.errors
+          ? Object.values(data.errors).flat().join(" ")
+          : null;
+
+        throw new Error(
+          validationErrors ||
+            data.message ||
+            "Unable to confirm cash payment."
+        );
+      }
+
+      const refreshed = await fetch(
+        `${API_URL}/api/admin/orders/${order.id}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        }
+      );
+
+      if (!refreshed.ok) {
+        throw new Error(
+          "Payment recorded, but the order could not be refreshed. Reload the page before taking further action."
+        );
+      }
+
+      const refreshedData = await refreshed.json();
+      const updated: Order = refreshedData.data;
+
+      setOrder(updated);
+      setOrderStatus(updated.order_status);
+      setPaymentStatus(updated.payment_status);
+      setSuccess("Cash payment recorded successfully.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to confirm cash payment."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /*
   |--------------------------------------------------------------------------
   | Loading
@@ -402,9 +504,9 @@ export default function AdminOrderDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
+      <main className="min-h-screen bg-background text-brand-navy">
         <div className="mx-auto max-w-7xl px-6 py-16">
-          <div className="rounded-3xl border border-black/10 bg-white p-10">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-10">
             <p className="font-semibold">
               Loading order...
             </p>
@@ -422,9 +524,9 @@ export default function AdminOrderDetailPage() {
 
   if (!order) {
     return (
-      <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
+      <main className="min-h-screen bg-background text-brand-navy">
         <div className="mx-auto max-w-3xl px-6 py-20 text-center">
-          <div className="rounded-3xl border border-black/10 bg-white p-10">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-10">
             <h1 className="text-3xl font-bold">
               Order not found
             </h1>
@@ -487,11 +589,11 @@ export default function AdminOrderDetailPage() {
   */
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
-      <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+    <main className="min-h-screen bg-background text-brand-navy">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <Link
           href="/admin/orders"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 transition hover:text-black"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-brand-navy"
         >
           <span>←</span>
           <span>Back to Orders</span>
@@ -547,12 +649,12 @@ export default function AdminOrderDetailPage() {
           </div>
         )}
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div className="mt-6 flex flex-col gap-5 lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
           {/* LEFT */}
-          <div className="space-y-6">
+          <div className="order-2 min-w-0 space-y-5 lg:order-1 lg:space-y-6">
 
             {/* Timeline */}
-            <section className="rounded-3xl border border-black/10 bg-white p-6 sm:p-8">
+            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 sm:p-8">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
                   Progress
@@ -580,8 +682,40 @@ export default function AdminOrderDetailPage() {
                 </div>
               )}
 
-              <div className="mt-8">
-                {timeline.map((step, index) => {
+              {/* Compact mobile progress */}
+              <div className="mt-5 lg:hidden">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-brand-navy">
+                    {formatText(order.order_status)}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {timeline.filter((step) => step.complete).length} of {timeline.length} milestones
+                  </p>
+                </div>
+
+                <div className="mt-3 flex gap-1.5">
+                  {timeline.map((step) => (
+                    <div
+                      key={step.label}
+                      className={`h-2 flex-1 rounded-full ${
+                        step.complete ? "bg-brand-navy" : "bg-slate-200"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <details className="group mt-4 lg:mt-8" open={undefined}>
+                <summary className="cursor-pointer list-none rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-brand-navy marker:hidden lg:hidden">
+                  <span className="flex items-center justify-between">
+                    <span>View Full Timeline</span>
+                    <span className="group-open:hidden">+</span>
+                    <span className="hidden group-open:inline">−</span>
+                  </span>
+                </summary>
+
+                <div className="mt-5 hidden group-open:block lg:mt-0 lg:!block">
+                  {timeline.map((step, index) => {
                   const isLast =
                     index === timeline.length - 1;
 
@@ -596,8 +730,8 @@ export default function AdminOrderDetailPage() {
                           className={[
                             "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold",
                             step.complete
-                              ? "border-black bg-black text-white"
-                              : "border-black/15 bg-white text-gray-300",
+                              ? "border-brand-navy bg-brand-navy text-white"
+                              : "border-slate-200 bg-white text-slate-300",
                           ].join(" ")}
                         >
                           {step.complete ? "✓" : index + 1}
@@ -608,7 +742,7 @@ export default function AdminOrderDetailPage() {
                             className={[
                               "min-h-16 w-0.5 flex-1",
                               step.complete
-                                ? "bg-black"
+                                ? "bg-brand-navy"
                                 : "bg-black/10",
                             ].join(" ")}
                           />
@@ -655,12 +789,13 @@ export default function AdminOrderDetailPage() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                  })}
+                </div>
+              </details>
             </section>
 
             {/* Items */}
-            <section className="rounded-3xl border border-black/10 bg-white p-6">
+            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-bold">
@@ -739,70 +874,76 @@ export default function AdminOrderDetailPage() {
               </div>
             </section>
 
-            {/* Customer */}
-            <section className="rounded-3xl border border-black/10 bg-white p-6">
-              <h2 className="text-2xl font-bold">
-                Customer
-              </h2>
+            {/* Customer and Delivery */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <details className="group lg:hidden">
+                <summary className="cursor-pointer list-none marker:hidden">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-bold text-brand-navy">
+                      Customer & Delivery
+                    </h2>
+                    <span className="text-xl font-semibold text-brand-navy group-open:hidden">
+                      +
+                    </span>
+                    <span className="hidden text-xl font-semibold text-brand-navy group-open:inline">
+                      −
+                    </span>
+                  </div>
 
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                <Info
-                  label="Name"
-                  value={order.customer_name}
-                />
+                  <p className="mt-2 text-sm font-medium text-slate-700">
+                    {order.customer_name}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {order.district} · {order.delivery_address}
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-brand-navy group-open:hidden">
+                    View contact and delivery details
+                  </p>
+                </summary>
 
-                <Info
-                  label="Phone"
-                  value={order.phone}
-                />
+                <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2">
+                  <Info label="Name" value={order.customer_name} />
+                  <Info label="Phone" value={order.phone} />
+                  <Info label="Email" value={order.email ?? "Not provided"} />
+                  <Info label="District / City" value={order.district} />
+                  <Info label="Delivery Address" value={order.delivery_address} />
+                  <Info
+                    label="Delivery Notes"
+                    value={order.delivery_notes ?? "No delivery notes"}
+                  />
+                </div>
+              </details>
 
-                <Info
-                  label="Email"
-                  value={order.email ?? "Not provided"}
-                />
+              <div className="hidden lg:block">
+                <h2 className="text-2xl font-bold text-brand-navy">
+                  Customer & Delivery
+                </h2>
 
-                <Info
-                  label="District / City"
-                  value={order.district}
-                />
-              </div>
-            </section>
-
-            {/* Delivery */}
-            <section className="rounded-3xl border border-black/10 bg-white p-6">
-              <h2 className="text-2xl font-bold">
-                Delivery
-              </h2>
-
-              <div className="mt-6">
-                <Info
-                  label="Delivery Address"
-                  value={order.delivery_address}
-                />
-              </div>
-
-              <div className="mt-5">
-                <Info
-                  label="Delivery Notes"
-                  value={
-                    order.delivery_notes ??
-                    "No delivery notes"
-                  }
-                />
+                <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <Info label="Name" value={order.customer_name} />
+                  <Info label="Phone" value={order.phone} />
+                  <Info label="Email" value={order.email ?? "Not provided"} />
+                  <Info label="District / City" value={order.district} />
+                  <Info label="Delivery Address" value={order.delivery_address} />
+                  <Info
+                    label="Delivery Notes"
+                    value={order.delivery_notes ?? "No delivery notes"}
+                  />
+                </div>
               </div>
             </section>
           </div>
 
           {/* RIGHT */}
-          <aside className="space-y-6">
+          <aside className="order-1 min-w-0 space-y-5 lg:order-2 lg:space-y-6">
             {/* Manage */}
-            <section className="rounded-3xl border border-black/10 bg-white p-6">
+            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
               <h2 className="text-2xl font-bold">
                 Manage Order
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-gray-500">
-                Update order progress and payment status.
+                Manage fulfilment and confirm payments securely.
               </p>
 
               <div className="mt-6">
@@ -816,9 +957,23 @@ export default function AdminOrderDetailPage() {
                     setOrderStatus(event.target.value);
                     setSuccess("");
                   }}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
+                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-brand-navy"
                 >
-                  {ORDER_STATUSES.map((status) => (
+                  {ORDER_STATUSES.filter((status) => {
+                    const nextStatus: Record<string, string> = {
+                      pending: "confirmed",
+                      confirmed: "processing",
+                      processing: "out_for_delivery",
+                      out_for_delivery: "delivered",
+                    };
+
+                    return (
+                      status.value === order.order_status ||
+                      status.value === nextStatus[order.order_status] ||
+                      (status.value === "cancelled" &&
+                        !["delivered", "cancelled"].includes(order.order_status))
+                    );
+                  }).map((status) => (
                     <option
                       key={status.value}
                       value={status.value}
@@ -830,37 +985,42 @@ export default function AdminOrderDetailPage() {
               </div>
 
               <div className="mt-5">
-                <label className="text-sm font-semibold">
-                  Payment Status
-                </label>
+                  <p className="text-sm font-semibold text-brand-navy">
+                    Payment Status
+                  </p>
 
-                <select
-                  value={paymentStatus}
-                  onChange={(event) => {
-                    setPaymentStatus(event.target.value);
-                    setSuccess("");
-                  }}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-black"
-                >
-                  {PAYMENT_STATUSES.map((status) => (
-                    <option
-                      key={status.value}
-                      value={status.value}
+                  <div className="mt-2 rounded-xl border border-brand-navy/10 bg-slate-50 px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClasses(order.payment_status)}`}
                     >
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                      {formatText(order.payment_status)}
+                    </span>
+
+
+                  </div>
+                </div>
 
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving}
-                className="mt-6 w-full rounded-full bg-black px-6 py-4 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving || orderStatus === order.order_status}
+                className="mt-6 w-full rounded-xl bg-brand-navy px-6 py-4 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save Status"}
               </button>
+
+              {order.payment_method === "cash_on_delivery" &&
+                order.payment_status === "pending" &&
+                order.order_status !== "cancelled" && (
+                  <button
+                    type="button"
+                    onClick={handleCollectPayment}
+                    disabled={saving}
+                    className="mt-3 w-full rounded-xl border border-brand-navy bg-white px-4 py-3 text-sm font-bold text-brand-navy transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving ? "Processing..." : "Confirm Cash Received"}
+                  </button>
+                )}
 
               <div className="mt-7 border-t border-black/10 pt-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
@@ -880,7 +1040,7 @@ export default function AdminOrderDetailPage() {
             </section>
 
             {/* Totals */}
-            <section className="rounded-3xl bg-black p-6 text-white">
+            <section className="rounded-2xl bg-brand-navy p-6 text-white shadow-sm">
               <h2 className="text-xl font-bold">
                 Order Total
               </h2>

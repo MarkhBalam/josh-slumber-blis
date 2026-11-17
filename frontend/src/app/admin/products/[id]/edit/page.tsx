@@ -1663,7 +1663,7 @@ export default function EditProductPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
+      <main className="min-h-screen bg-background text-brand-navy">
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="rounded-3xl border border-black/10 bg-white p-10">
             <p className="font-semibold">
@@ -1682,8 +1682,8 @@ export default function EditProductPage() {
   */
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
-      <div className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
+    <main className="min-h-screen bg-background text-brand-navy">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Top */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link
@@ -1697,17 +1697,15 @@ export default function EditProductPage() {
         {/* Heading */}
         <div className="mt-8 flex flex-wrap items-end justify-between gap-5">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-500">
-              Josh Slumber Blis
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Josh Slumber Bliss
             </p>
 
-            <h1 className="mt-2 text-4xl font-bold">
+            <h1 className="mt-2 text-xl font-bold sm:text-3xl">
               Edit Product
             </h1>
 
-            <p className="mt-2 text-gray-500">
-              Update product information, options, prices, stock and images.
-            </p>
+
           </div>
 
           <button
@@ -1738,17 +1736,15 @@ export default function EditProductPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="mt-8 space-y-8"
+          className="mt-6 space-y-5 sm:space-y-6"
         >
           {/* Catalogue */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-            <h2 className="text-2xl font-bold">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="text-xl font-bold">
               Catalogue
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Change where this product belongs.
-            </p>
+
 
             <div className="mt-7 grid gap-5 sm:grid-cols-2">
               {/* Category */}
@@ -1940,176 +1936,18 @@ export default function EditProductPage() {
             </div>
           </section>
 
-          {/* Product Details */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-            <h2 className="text-2xl font-bold">
-              Product Details
-            </h2>
-
-            <div className="mt-7 grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-semibold">
-                  Brand
-                </label>
-
-                <input
-                  type="text"
-                  value={brand}
-                  onChange={(event) =>
-                    setBrand(
-                      event.target.value
-                    )
-                  }
-                  placeholder="e.g. Rosefoam"
-                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-3"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold">
-                  Material
-                </label>
-
-                <input
-                  type="text"
-                  value={material}
-                  onChange={(event) =>
-                    setMaterial(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Optional"
-                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-3"
-                />
-              </div>
-
-              {variantKind ===
-                "mattress" && (
-                <div>
-                  <label className="text-sm font-semibold">
-                    Firmness
-                  </label>
-
-                  <select
-                    value={firmness}
-                    onChange={(event) =>
-                      setFirmness(
-                        event.target.value
-                      )
-                    }
-                    className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3"
-                  >
-                    <option value="">
-                      Not specified
-                    </option>
-
-                    {FIRMNESS_OPTIONS.map(
-                      (option) => (
-                        <option
-                          key={option}
-                          value={option}
-                        >
-                          {option}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  {firmness ===
-                    "Other / Custom" && (
-                    <input
-                      type="text"
-                      value={
-                        customFirmness
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setCustomFirmness(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="Enter firmness"
-                      className="mt-3 w-full rounded-2xl border border-black/10 px-4 py-3"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Description */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-            <h2 className="text-2xl font-bold">
-              Description
-            </h2>
-
-            <div className="mt-6 space-y-5">
-              <div>
-                <label className="text-sm font-semibold">
-                  Short Description
-                </label>
-
-                <textarea
-                  rows={3}
-                  maxLength={500}
-                  value={
-                    shortDescription
-                  }
-                  onChange={(event) =>
-                    setShortDescription(
-                      event.target.value
-                    )
-                  }
-                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3"
-                />
-
-                <p className="mt-1 text-right text-xs text-gray-400">
-                  {shortDescription.length}
-                  /500
-                </p>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold">
-                  Full Description
-                </label>
-
-                <textarea
-                  rows={6}
-                  value={description}
-                  onChange={(event) =>
-                    setDescription(
-                      event.target.value
-                    )
-                  }
-                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3"
-                />
-              </div>
-            </div>
-          </section>
-
           {/* Options */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold">
-                  Options & Prices
+                <h2 className="text-xl font-bold">
+                  Prices & Sizes
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Update the available product options.
-                </p>
+
               </div>
 
-              <button
-                type="button"
-                onClick={addVariant}
-                className="rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white"
-              >
-                + Add Another Option
-              </button>
+
             </div>
 
             <div className="mt-7 space-y-5">
@@ -2426,15 +2264,39 @@ export default function EditProductPage() {
             </div>
           </section>
 
+          {/* Description */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="text-xl font-bold">
+              Description
+            </h2>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold">
+                  Product Description
+                </label>
+
+                <textarea
+                  rows={6}
+                  value={description}
+                  onChange={(event) =>
+                    setDescription(
+                      event.target.value
+                    )
+                  }
+                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 px-4 py-3"
+                />
+              </div>
+            </div>
+          </section>
+
           {/* Images */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-            <h2 className="text-2xl font-bold">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="text-xl font-bold">
               Product Images
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Keep, remove or add product photos. Maximum 8 images.
-            </p>
+
 
             {existingImages.length >
               0 && (
@@ -2615,12 +2477,12 @@ export default function EditProductPage() {
           </section>
 
           {/* Visibility */}
-          <section className="rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-            <h2 className="text-2xl font-bold">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="text-xl font-bold">
               Product Visibility
             </h2>
 
-            <div className="mt-6 space-y-4">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <label className="flex cursor-pointer gap-3 rounded-2xl border border-black/10 p-4">
                 <input
                   type="radio"
@@ -2665,7 +2527,7 @@ export default function EditProductPage() {
                 </div>
               </label>
 
-              <label className="flex items-center gap-3 pt-2 font-semibold">
+              <label className="flex items-center gap-3 pt-2 font-semibold sm:col-span-2">
                 <input
                   type="checkbox"
                   checked={isFeatured}
@@ -2683,10 +2545,10 @@ export default function EditProductPage() {
           </section>
 
           {/* Actions */}
-          <div className="flex flex-col-reverse gap-3 rounded-3xl border border-black/10 bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <Link
               href="/admin/products"
-              className="rounded-full border border-black/10 px-6 py-3 text-center font-semibold"
+              className="rounded-xl border border-brand-navy px-7 py-3.5 text-center font-semibold text-brand-navy transition hover:bg-brand-navy hover:text-white"
             >
               Cancel
             </Link>
@@ -2696,7 +2558,7 @@ export default function EditProductPage() {
               disabled={
                 saving || deleting
               }
-              className="rounded-full bg-black px-8 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-brand-navy px-8 py-3.5 font-semibold text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving
                 ? "Saving Changes..."
@@ -2732,16 +2594,24 @@ function PriceField({
 
       <input
         required
-        type="number"
-        min="0"
-        value={value}
-        onChange={(event) =>
-          onChange(
-            event.target.value
-          )
+        type="text"
+        inputMode="decimal"
+        value={
+          value === ""
+            ? ""
+            : Number(value).toLocaleString("en-UG", {
+                maximumFractionDigits: 2,
+              })
         }
-        placeholder="e.g. 850000"
-        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3"
+        onChange={(event) => {
+          const raw = event.target.value.replace(/,/g, "");
+
+          if (/^\d*(\.\d{0,2})?$/.test(raw)) {
+            onChange(raw);
+          }
+        }}
+        placeholder="e.g. 850,000"
+        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 focus:border-brand-navy focus:outline-none"
       />
     </div>
   );

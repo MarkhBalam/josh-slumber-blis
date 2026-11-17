@@ -217,6 +217,52 @@ class OrderController extends Controller
     |--------------------------------------------------------------------------
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Authorized Guest Order Confirmation
+    |--------------------------------------------------------------------------
+    */
+
+    public function confirmationDetails(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'order_number' => ['required', 'string', 'max:100'],
+            'payment_access_token' => [
+                'required',
+                'string',
+                'regex:/^[a-fA-F0-9]{64}$/',
+            ],
+        ]);
+
+        $order = Order::query()
+            ->where('order_number', $validated['order_number'])
+            ->first();
+
+        if (
+            ! $order ||
+            empty($order->payment_access_token_hash) ||
+            ! hash_equals(
+                $order->payment_access_token_hash,
+                hash('sha256', $validated['payment_access_token'])
+            )
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order confirmation details are unavailable.',
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'order_number' => $order->order_number,
+                'payment_method' => $order->payment_method,
+                'payment_status' => $order->payment_status,
+                'order_status' => $order->order_status,
+            ],
+        ]);
+    }
+
     private function trackingData(Order $order): array
     {
         return [

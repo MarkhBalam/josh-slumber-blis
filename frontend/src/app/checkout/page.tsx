@@ -232,6 +232,24 @@ export default function CheckoutPage() {
         }
 
         if (selectedPaymentMethod === "cash_on_delivery") {
+          if (
+            typeof paymentAccessToken !== "string" ||
+            !/^[a-fA-F0-9]{64}$/.test(paymentAccessToken)
+          ) {
+            throw new Error(
+              "Order created, but confirmation authorization is missing. Contact support with your order number: " +
+                orderNumber
+            );
+          }
+
+          sessionStorage.setItem(
+            "jsb_order_confirmation",
+            JSON.stringify({
+              orderNumber,
+              paymentAccessToken,
+            })
+          );
+
           clearCart();
           clearCheckout();
           router.push(

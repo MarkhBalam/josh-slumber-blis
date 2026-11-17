@@ -19,31 +19,95 @@ type Product = {
 
 type Order = {
   id: number;
+  order_number: string;
+  customer_name: string;
+  district: string;
   total: string;
-  order_status: string;
   payment_status: string;
+  order_status: string;
+  created_at: string;
 };
 
-function formatPrice(price: number) {
-  return `UGX ${price.toLocaleString("en-UG")}`;
+function money(value: number | string) {
+  return `UGX ${Number(value).toLocaleString("en-UG")}`;
+}
+
+function dateTime(value: string) {
+  return new Intl.DateTimeFormat("en-UG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function readable(value: string) {
+  return value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function Status({
+  value,
+  payment = false,
+}: {
+  value: string;
+  payment?: boolean;
+}) {
+  const styles: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-800",
+    confirmed: "bg-blue-50 text-blue-800",
+    processing: "bg-indigo-50 text-indigo-800",
+    out_for_delivery: "bg-orange-50 text-orange-800",
+    delivered: "bg-emerald-50 text-emerald-800",
+    paid: "bg-emerald-50 text-emerald-800",
+    failed: "bg-red-50 text-red-700",
+    cancelled: "bg-red-50 text-red-700",
+    refunded: "bg-slate-100 text-slate-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${
+        styles[value] ?? "bg-slate-100 text-slate-700"
+      }`}
+    >
+      {payment ? `Payment: ${readable(value)}` : readable(value)}
+    </span>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-brand-navy/10 bg-white p-3 sm:p-5">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="mt-2 break-words text-xl font-extrabold tracking-tight text-brand-navy sm:mt-3 sm:text-2xl">
+        {value}
+      </p>
+      <p className="mt-2 text-xs text-slate-500">{detail}</p>
+    </div>
+  );
 }
 
 export default function AdminPage() {
   const router = useRouter();
 
   const [user, setUser] = useState<AdminUser | null>(null);
-
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  /*
-  |--------------------------------------------------------------------------
-  | Load Dashboard
-  |--------------------------------------------------------------------------
-  */
+  const [selectedStatus, setSelectedStatus] = useState("pending");
 
   useEffect(() => {
     async function loadDashboard() {
@@ -51,14 +115,14 @@ export default function AdminPage() {
         "josh-slumber-blis-admin-token"
       );
 
-      const storedUser = localStorage.getItem(
-        "josh-slumber-blis-admin-user"
-      );
-
       if (!token) {
         router.replace("/admin/login");
         return;
       }
+
+      const storedUser = localStorage.getItem(
+        "josh-slumber-blis-admin-user"
+      );
 
       if (storedUser) {
         try {
@@ -82,7 +146,6 @@ export default function AdminPage() {
               },
               cache: "no-store",
             }),
-
             fetch(`${API_URL}/api/admin/orders`, {
               headers: {
                 Accept: "application/json",
@@ -92,12 +155,6 @@ export default function AdminPage() {
             }),
           ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Expired / Invalid Admin Session
-        |--------------------------------------------------------------------------
-        */
-
         if (
           productsResponse.status === 401 ||
           ordersResponse.status === 401
@@ -105,43 +162,35 @@ export default function AdminPage() {
           localStorage.removeItem(
             "josh-slumber-blis-admin-token"
           );
-
           localStorage.removeItem(
             "josh-slumber-blis-admin-user"
           );
-
           router.replace("/admin/login");
-
           return;
         }
 
-        const productsData =
-          await productsResponse.json();
-
-        const ordersData =
-          await ordersResponse.json();
+        const productsData = await productsResponse.json();
+        const ordersData = await ordersResponse.json();
 
         if (!productsResponse.ok) {
           throw new Error(
-            productsData.message ||
-              "Failed to load products."
+            productsData.message || "Unable to load products."
           );
         }
 
         if (!ordersResponse.ok) {
           throw new Error(
-            ordersData.message ||
-              "Failed to load orders."
+            ordersData.message || "Unable to load orders."
           );
         }
 
         setProducts(productsData.data ?? []);
         setOrders(ordersData.data ?? []);
-      } catch (error) {
+      } catch (err) {
         setError(
-          error instanceof Error
-            ? error.message
-            : "Something went wrong while loading the dashboard."
+          err instanceof Error
+            ? err.message
+            : "Unable to load the dashboard."
         );
       } finally {
         setLoading(false);
@@ -151,439 +200,309 @@ export default function AdminPage() {
     loadDashboard();
   }, [router]);
 
-  /*
-  |--------------------------------------------------------------------------
-  | Dashboard Calculations
-  |--------------------------------------------------------------------------
-  */
+  const sortedOrders = useMemo(
+    () =>
+      [...orders].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      ),
+    [orders]
+  );
 
-  const totalProducts = products.length;
+  const incomingOrders = sortedOrders.filter(
+    (order) => order.order_status === "pending"
+  );
+
+  const inProgressOrders = orders.filter((order) =>
+    ["confirmed", "processing", "out_for_delivery"].includes(
+      order.order_status
+    )
+  );
+
+  const paidValue = orders
+    .filter((order) => order.payment_status === "paid")
+    .reduce((sum, order) => sum + Number(order.total), 0);
 
   const activeProducts = products.filter(
     (product) => product.is_active
   ).length;
 
-  const totalOrders = orders.length;
-
-  const pendingOrders = orders.filter(
-    (order) => order.order_status === "pending"
-  ).length;
-
-  const activeOrders = orders.filter((order) =>
-    [
-      "confirmed",
-      "processing",
-      "out_for_delivery",
-    ].includes(order.order_status)
-  ).length;
-
-  const deliveredOrders = orders.filter(
-    (order) => order.order_status === "delivered"
-  ).length;
-
-  /*
-  |--------------------------------------------------------------------------
-  | Paid Value
-  |--------------------------------------------------------------------------
-  */
-
-  const paidOrderValue = useMemo(
-    () =>
-      orders
-        .filter(
-          (order) => order.payment_status === "paid"
-        )
-        .reduce(
-          (total, order) =>
-            total + Number(order.total),
-          0
-        ),
-    [orders]
-  );
-
-  /*
-  |--------------------------------------------------------------------------
-  | Total Order Value
-  |--------------------------------------------------------------------------
-  */
-
-  const totalOrderValue = useMemo(
-    () =>
-      orders
-        .filter(
-          (order) =>
-            order.order_status !== "cancelled"
-        )
-        .reduce(
-          (total, order) =>
-            total + Number(order.total),
-          0
-        ),
-    [orders]
-  );
-
-  /*
-  |--------------------------------------------------------------------------
-  | Logout
-  |--------------------------------------------------------------------------
-  */
-
-  async function handleLogout() {
-    const token = localStorage.getItem(
-      "josh-slumber-blis-admin-token"
-    );
-
-    if (token) {
-      try {
-        await fetch(
-          `${API_URL}/api/admin/logout`,
-          {
-            method: "POST",
-
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-      } catch {
-        // Local logout still continues if API request fails.
-      }
-    }
-
-    localStorage.removeItem(
-      "josh-slumber-blis-admin-token"
-    );
-
-    localStorage.removeItem(
-      "josh-slumber-blis-admin-user"
-    );
-
-    router.replace("/admin/login");
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Loading
-  |--------------------------------------------------------------------------
-  */
-
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f8f6f2] text-[#1f1f1f]">
-        <div className="text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-black/10 border-t-black" />
-
-          <p className="mt-4 font-semibold">
-            Loading dashboard...
-          </p>
-        </div>
+      <main className="flex min-h-[65vh] items-center justify-center">
+        <p className="font-semibold text-brand-navy">
+          Loading business overview...
+        </p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
-      <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        {/* Top */}
-        <div className="flex flex-wrap items-start justify-between gap-6">
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-7xl space-y-7 px-5 py-8 sm:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-500">
-              Josh Slumber Blis
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold">
-              Admin Dashboard
+            <h1 className="text-3xl font-extrabold text-brand-navy">
+              Overview
             </h1>
-
-            <p className="mt-3 text-gray-600">
-              Welcome
-              {user?.name ? `, ${user.name}` : ""}.
+            <p className="mt-2 text-sm text-slate-500">
+              Orders, payments and store activity
+              {user?.name ? ` · ${user.name}` : ""}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/"
-              target="_blank"
-              className="rounded-full border border-black/10 bg-white px-5 py-2.5 text-sm font-semibold transition hover:border-black"
-            >
-              View Store
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-full border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-            >
-              Log Out
-            </button>
-          </div>
+          <Link
+            href="/admin/orders"
+            className="rounded-xl bg-brand-navy px-5 py-3 text-sm font-bold text-white transition hover:opacity-90"
+          >
+            View All Orders
+          </Link>
         </div>
 
-        {/* Error */}
         {error && (
-          <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* Main Stats */}
-        <section className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardCard
-            label="Total Products"
-            value={String(totalProducts)}
-            description={`${activeProducts} active`}
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Metric
+            label="Incoming orders"
+            value={String(incomingOrders.length)}
+            detail="Awaiting confirmation"
           />
-
-          <DashboardCard
-            label="Total Orders"
-            value={String(totalOrders)}
-            description={`${deliveredOrders} delivered`}
+          <Metric
+            label="Orders in progress"
+            value={String(inProgressOrders.length)}
+            detail="Confirmed, processing or dispatched"
           />
-
-          <DashboardCard
-            label="Pending Orders"
-            value={String(pendingOrders)}
-            description={`${activeOrders} currently being handled`}
+          <Metric
+            label="Paid order value"
+            value={money(paidValue)}
+            detail="Orders with confirmed paid status"
           />
-
-          <div className="rounded-3xl bg-black p-6 text-white">
-            <p className="text-sm text-white/60">
-              Paid Order Value
-            </p>
-
-            <p className="mt-3 text-2xl font-bold">
-              {formatPrice(paidOrderValue)}
-            </p>
-
-            <p className="mt-3 text-xs leading-5 text-white/50">
-              Orders marked as paid only
-            </p>
-          </div>
+          <Metric
+            label="Active products"
+            value={String(activeProducts)}
+            detail={`${products.length} products in catalogue`}
+          />
         </section>
 
-        {/* Business Overview */}
-        <section className="mt-8 rounded-3xl border border-black/10 bg-white p-6 md:p-8">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-                Business Overview
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold">
-                Store activity
-              </h2>
-            </div>
-
-            <p className="text-sm text-gray-500">
-              Current data from your store
-            </p>
-          </div>
-
-          <div className="mt-7 grid gap-5 md:grid-cols-3">
-            <div className="rounded-2xl bg-[#f8f6f2] p-5">
-              <p className="text-sm text-gray-500">
-                Active Products
-              </p>
-
-              <p className="mt-2 text-3xl font-bold">
-                {activeProducts}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-[#f8f6f2] p-5">
-              <p className="text-sm text-gray-500">
-                Orders In Progress
-              </p>
-
-              <p className="mt-2 text-3xl font-bold">
-                {activeOrders}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-[#f8f6f2] p-5">
-              <p className="text-sm text-gray-500">
-                Total Order Value
-              </p>
-
-              <p className="mt-2 text-xl font-bold">
-                {formatPrice(totalOrderValue)}
-              </p>
-
-              <p className="mt-2 text-xs text-gray-400">
-                Excludes cancelled orders
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Management */}
-        <section className="mt-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-              Management
-            </p>
-
-            <h2 className="mt-2 text-2xl font-bold">
-              Quick Actions
+        <section className="overflow-hidden rounded-2xl border border-brand-navy/10 bg-white">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <h2 className="text-lg font-extrabold text-brand-navy">
+              Order management
             </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Track and manage orders through every stage
+            </p>
           </div>
 
-          <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {/* Products */}
-            <Link
-              href="/admin/products"
-              className="group rounded-3xl border border-black/10 bg-white p-7 transition hover:-translate-y-1 hover:border-black hover:shadow-lg"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-xl text-white">
-                📦
-              </div>
+          <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-4 py-4 sm:flex-wrap sm:px-6">
+            {[
+              ["pending", "Pending"],
+              ["confirmed", "Confirmed"],
+              ["processing", "Processing"],
+              ["out_for_delivery", "Out for Delivery"],
+              ["delivered", "Delivered"],
+              ["cancelled", "Cancelled"],
+            ].map(([status, label]) => {
+              const count = orders.filter(
+                (order) => order.order_status === status
+              ).length;
 
-              <h3 className="mt-6 text-xl font-bold">
-                Products
+              const active = selectedStatus === status;
+
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setSelectedStatus(status)}
+                  className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    active
+                      ? "bg-brand-navy text-white"
+                      : "bg-surface-soft text-brand-navy hover:bg-brand-navy/10"
+                  }`}
+                >
+                  {label}
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                      active
+                        ? "bg-white/20 text-white"
+                        : "bg-white text-brand-navy"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
+            <div>
+              <h3 className="font-bold text-brand-navy">
+                {readable(selectedStatus)} orders
               </h3>
-
-              <p className="mt-2 text-sm leading-6 text-gray-500">
-                View products, change prices, edit
-                stock and manage product images.
+              <p className="mt-1 text-xs text-slate-500">
+                {selectedStatus === "pending"
+                  ? "New orders awaiting confirmation"
+                  : selectedStatus === "delivered"
+                    ? "Orders successfully delivered to customers"
+                    : selectedStatus === "cancelled"
+                      ? "Cancelled orders retained for records"
+                      : "Orders currently at this fulfilment stage"}
               </p>
+            </div>
 
-              <p className="mt-6 text-sm font-semibold">
-                Manage Products →
-              </p>
-            </Link>
-
-            {/* Add Product */}
-            <Link
-              href="/admin/products/create"
-              className="group rounded-3xl border border-black/10 bg-white p-7 transition hover:-translate-y-1 hover:border-black hover:shadow-lg"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-2xl text-white">
-                +
-              </div>
-
-              <h3 className="mt-6 text-xl font-bold">
-                Add Product
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-gray-500">
-                Add a new catalogue item with
-                variants, pricing, stock and photos.
-              </p>
-
-              <p className="mt-6 text-sm font-semibold">
-                Create Product →
-              </p>
-            </Link>
-
-            {/* Orders */}
             <Link
               href="/admin/orders"
-              className="group rounded-3xl border border-black/10 bg-white p-7 transition hover:-translate-y-1 hover:border-black hover:shadow-lg"
+              className="text-sm font-bold text-brand-navy hover:underline"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-xl text-white">
-                🧾
-              </div>
-
-              <div className="mt-6 flex items-center gap-3">
-                <h3 className="text-xl font-bold">
-                  Orders
-                </h3>
-
-                {pendingOrders > 0 && (
-                  <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800">
-                    {pendingOrders} pending
-                  </span>
-                )}
-              </div>
-
-              <p className="mt-2 text-sm leading-6 text-gray-500">
-                Review customer orders, delivery
-                details and update order status.
-              </p>
-
-              <p className="mt-6 text-sm font-semibold">
-                Manage Orders →
-              </p>
-            </Link>
-
-            {/* Homepage Highlights */}
-            <Link
-              href="/admin/hero-slides"
-              className="group rounded-3xl border border-black/10 bg-white p-7 transition hover:-translate-y-1 hover:border-[#040D52] hover:shadow-lg"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#040D52] text-xl text-white">
-                🖼️
-              </div>
-
-              <h3 className="mt-6 text-xl font-bold">
-                Homepage Highlights
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-gray-500">
-                Upload and manage promotional images
-                that rotate in the homepage hero.
-              </p>
-
-              <p className="mt-6 text-sm font-semibold text-[#040D52]">
-                Manage Highlights →
-              </p>
+              View all orders →
             </Link>
           </div>
-        </section>
 
-        {/* Admin Account */}
-        {user && (
-          <section className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
-              Signed In As
-            </p>
+          {sortedOrders.filter(
+            (order) => order.order_status === selectedStatus
+          ).length === 0 ? (
+            <div className="border-t border-slate-100 px-6 py-12 text-center">
+              <p className="font-semibold text-brand-navy">
+                No {readable(selectedStatus).toLowerCase()} orders
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Orders in this stage will appear here.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-slate-100 md:hidden">
+                {sortedOrders
+                  .filter((order) => order.order_status === selectedStatus)
+                  .slice(0, 10)
+                  .map((order) => (
+                    <article key={order.id} className="space-y-3 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="min-w-0 break-all text-sm font-bold text-brand-navy">
+                          {order.order_number}
+                        </p>
+                        <Status value={order.payment_status} />
+                      </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="font-bold">
-                  {user.name}
-                </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500">Customer</p>
+                          <p className="mt-1 break-words text-sm font-semibold">
+                            {order.customer_name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {order.district}
+                          </p>
+                        </div>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  {user.email}
-                </p>
+                        <div className="min-w-0 text-right">
+                          <p className="text-xs text-slate-500">Amount</p>
+                          <p className="mt-1 break-words text-sm font-bold text-brand-navy">
+                            {money(order.total)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-slate-500">
+                          {dateTime(order.created_at)}
+                        </p>
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          className="rounded-lg bg-brand-navy px-4 py-2 text-xs font-bold text-white"
+                        >
+                          Review order →
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
               </div>
 
-              <span className="rounded-full bg-green-100 px-4 py-2 text-xs font-semibold text-green-700">
-                Admin
-              </span>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[750px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-6 py-3 font-semibold">Order</th>
+                    <th className="px-6 py-3 font-semibold">Customer</th>
+                    <th className="px-6 py-3 font-semibold">Date</th>
+                    <th className="px-6 py-3 font-semibold">Amount</th>
+                    <th className="px-6 py-3 font-semibold">Payment</th>
+                    <th className="px-6 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {sortedOrders
+                    .filter(
+                      (order) => order.order_status === selectedStatus
+                    )
+                    .slice(0, 10)
+                    .map((order) => (
+                      <tr
+                        key={order.id}
+                        className="transition hover:bg-slate-50/70"
+                      >
+                        <td className="px-6 py-4 font-bold text-brand-navy">
+                          {order.order_number}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <p className="font-semibold">
+                            {order.customer_name}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {order.district}
+                          </p>
+                        </td>
+
+                        <td className="px-6 py-4 text-slate-600">
+                          {dateTime(order.created_at)}
+                        </td>
+
+                        <td className="px-6 py-4 font-semibold">
+                          {money(order.total)}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <Status value={order.payment_status} />
+                        </td>
+
+                        <td className="px-6 py-4 text-right">
+                          <Link
+                            href={`/admin/orders/${order.id}`}
+                            className="font-bold text-brand-navy underline-offset-4 hover:underline"
+                          >
+                            Review →
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {sortedOrders.filter(
+            (order) => order.order_status === selectedStatus
+          ).length > 10 && (
+            <div className="border-t border-slate-100 px-6 py-4 text-right">
+              <Link
+                href="/admin/orders"
+                className="text-sm font-bold text-brand-navy hover:underline"
+              >
+                View remaining orders →
+              </Link>
             </div>
-          </section>
-        )}
+          )}
+        </section>
       </div>
     </main>
-  );
-}
-
-function DashboardCard({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-black/10 bg-white p-6">
-      <p className="text-sm text-gray-500">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-bold">
-        {value}
-      </p>
-
-      <p className="mt-3 text-xs leading-5 text-gray-400">
-        {description}
-      </p>
-    </div>
   );
 }

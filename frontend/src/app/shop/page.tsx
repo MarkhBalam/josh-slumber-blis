@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { getProducts } from "@/lib/api";
+import JSBProductCardAction from "@/components/JSBProductCardAction";
 
 type ProductVariant = {
   id: number;
   label: string;
+  size_label: string | null;
   price: string;
   stock_status: string;
 };
@@ -21,33 +23,57 @@ type Product = {
   name: string;
   slug: string;
   brand: string | null;
-  short_description: string | null;
+  description: string | null;
 
   category: {
     id: number;
     name: string;
     slug: string;
+    parent_id: number | null;
   } | null;
 
   variants: ProductVariant[];
   images: ProductImage[];
 };
 
-function formatPrice(price: number) {
-  return `UGX ${price.toLocaleString("en-UG")}`;
+type Category = {
+  id: number;
+  slug: string;
+  children?: Category[];
+};
+
+function collectCategoryIds(category: Category): number[] {
+  return [
+    category.id,
+    ...(category.children ?? []).flatMap(collectCategoryIds),
+  ];
 }
 
-function getProductImage(product: Product) {
-  if (!product.images || product.images.length === 0) {
-    return null;
+async function getMattressCategoryIds(): Promise<Set<number>> {
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/categories",
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) return new Set();
+
+    const data = await response.json();
+    const categories: Category[] = data.data ?? [];
+    const mattresses = categories.find(
+      (category) => category.slug === "mattresses"
+    );
+
+    return new Set(
+      mattresses ? collectCategoryIds(mattresses) : []
+    );
+  } catch {
+    return new Set();
   }
+}
 
-  const primaryImage =
-    product.images.find(
-      (image) => image.is_primary
-    ) ?? product.images[0];
-
-  return `http://127.0.0.1:8000/storage/${primaryImage.image_path}`;
+function formatPrice(price: number) {
+  return `UGX ${price.toLocaleString("en-UG")}`;
 }
 
 export default async function ShopPage({
@@ -68,8 +94,11 @@ export default async function ShopPage({
   |--------------------------------------------------------------------------
   */
 
-  const productsResponse =
-    await getProducts(category);
+  const [productsResponse, mattressCategoryIds] =
+    await Promise.all([
+      getProducts(category),
+      getMattressCategoryIds(),
+    ]);
 
   const products: Product[] =
     productsResponse.data ?? [];
@@ -85,7 +114,7 @@ export default async function ShopPage({
         const searchableText = [
           product.name,
           product.brand ?? "",
-          product.short_description ?? "",
+          product.description ?? "",
           product.category?.name ?? "",
         ]
           .join(" ")
@@ -106,156 +135,148 @@ export default async function ShopPage({
       <section className="mx-auto max-w-7xl px-4 pb-14 pt-5 sm:px-6 sm:pb-16 sm:pt-7 lg:px-8 lg:pb-20 lg:pt-8">
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:gap-6">
-            {filteredProducts.map(
-              (product) => {
-                const availablePrices =
-                  product.variants
-                    .filter(
-                      (variant) =>
-                        variant.stock_status ===
-                        "in_stock"
-                    )
-                    .map((variant) =>
-                      Number(variant.price)
-                    );
+            {filteredProducts.map((product) => {
+              const variants = product.variants ?? [];
 
-                const lowestPrice =
-                  availablePrices.length > 0
-                    ? Math.min(
-                        ...availablePrices
-                      )
-                    : null;
+              const isSingleSize = variants.length === 1;
 
-                const productImage =
-                  getProductImage(product);
+              const singleVariant = isSingleSize
+                ? variants[0]
+                : null;
 
-                const primaryImage =
-                  product.images?.find(
-                    (image) =>
-                      image.is_primary
-                  ) ??
-                  product.images?.[0];
+              const availablePrices = variants
+                .filter(
+                  (variant) =>
+                    variant.stock_status === "in_stock"
+                )
+                .map((variant) => Number(variant.price))
+                .filter(Number.isFinite);
 
-                const hasStock =
-                  product.variants.some(
-                    (variant) =>
-                      variant.stock_status ===
-                      "in_stock"
-                  );
+              const lowestPrice =
+                availablePrices.length > 0
+                  ? Math.min(...availablePrices)
+                  : null;
 
-                return (
-                  <article
-                    key={product.id}
-                    className="group overflow-hidden rounded-2xl border border-border-soft bg-surface transition duration-300 sm:rounded-[1.5rem] lg:hover:-translate-y-1 lg:hover:shadow-xl"
+              const hasStock = variants.some(
+                (variant) =>
+                  variant.stock_status === "in_stock"
+              );
+
+              const primaryImage =
+                product.images?.find(
+                  (image) => image.is_primary
+                ) ??
+                [...(product.images ?? [])].sort(
+                  (a, b) => a.sort_order - b.sort_order
+                )[0];
+
+              const imagePath =
+                primaryImage?.image_path ?? null;
+
+              const imageUrl = imagePath
+                ? `http://127.0.0.1:8000/storage/${imagePath}`
+                : null;
+
+              const isMattress =
+                product.category !== null &&
+                mattressCategoryIds.has(product.category.id);
+
+              const sizeLabel = singleVariant
+                ? singleVariant.size_label ||
+                  singleVariant.label
+                : null;
+
+              const description = product.description?.trim();
+
+              return (
+                <article
+                  key={product.id}
+                  className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border-soft bg-surface transition duration-300 sm:rounded-[1.5rem] lg:hover:-translate-y-1 lg:hover:shadow-xl"
+                >
+                  <Link
+                    href={`/products/${product.slug}`}
+                    className="relative block aspect-square overflow-hidden bg-surface-soft sm:aspect-[4/3]"
                   >
-                    {/* PRODUCT IMAGE */}
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={
+                          primaryImage?.alt_text ??
+                          product.name
+                        }
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <span className="text-4xl sm:text-5xl">
+                          🛏️
+                        </span>
+                      </div>
+                    )}
 
+                    {!hasStock && (
+                      <span className="absolute right-2 top-2 rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-danger shadow-sm sm:right-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-[10px]">
+                        Out of Stock
+                      </span>
+                    )}
+                  </Link>
+
+                  <div className="flex flex-1 flex-col p-3 sm:p-5 lg:p-6">
                     <Link
                       href={`/products/${product.slug}`}
-                      className="relative block aspect-square overflow-hidden bg-surface-soft sm:aspect-[4/3]"
+                      className="block"
                     >
-                      {productImage ? (
-                        <img
-                          src={productImage}
-                          alt={
-                            primaryImage?.alt_text ??
-                            product.name
-                          }
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <span className="text-4xl sm:text-5xl">
-                            🛏️
-                          </span>
-                        </div>
-                      )}
-
-                      {!hasStock && (
-                        <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-danger shadow-sm sm:left-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs">
-                          Out of Stock
-                        </span>
-                      )}
-
-                      {hasStock && (
-                        <span className="absolute left-2 top-2 rounded-full bg-brand-yellow px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-brand-navy shadow-sm sm:left-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs">
-                          In Stock
-                        </span>
-                      )}
+                      <h2 className="line-clamp-2 text-sm font-bold leading-snug text-brand-navy sm:text-lg lg:text-xl">
+                        {product.name}
+                      </h2>
                     </Link>
 
-                    {/* PRODUCT INFORMATION */}
-
-                    <div className="p-3 sm:p-5 lg:p-6">
-                      <div className="hidden flex-wrap items-center gap-2 sm:flex">
-                        {product.brand && (
-                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted sm:text-xs">
-                            {product.brand}
-                          </p>
-                        )}
-
-                        {product.category && (
-                          <>
-                            {product.brand && (
-                              <span className="text-xs text-border-soft">
-                                •
-                              </span>
-                            )}
-
-                            <p className="text-[10px] font-medium text-text-muted sm:text-xs">
-                              {
-                                product.category
-                                  .name
-                              }
-                            </p>
-                          </>
-                        )}
-                      </div>
-
-                      <Link
-                        href={`/products/${product.slug}`}
-                      >
-                        <h2 className="line-clamp-2 text-sm font-bold leading-snug text-brand-navy sm:mt-2 sm:text-lg lg:text-xl">
-                          {product.name}
-                        </h2>
-                      </Link>
-
-                      <p className="mt-2 hidden line-clamp-2 min-h-11 text-sm leading-6 text-text-muted md:block">
-                        {product.short_description ??
-                          "Quality bedroom essential from Josh Slumber Blis."}
+                    {/* MATTRESS SIZE OR ADMIN PRODUCT DESCRIPTION */}
+                    {isMattress && isSingleSize && sizeLabel &&
+                      sizeLabel.toLowerCase() !== "standard" ? (
+                      <p className="mt-2 text-xs font-medium text-text-muted sm:text-sm">
+                        Size: {sizeLabel}
                       </p>
+                    ) : !isMattress && description ? (
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-text-muted sm:text-sm">
+                        {description}
+                      </p>
+                    ) : null}
 
-                      <div className="mt-3 border-t border-border-soft pt-3 sm:mt-5 sm:pt-4">
-                        <p className="hidden text-xs text-text-muted sm:block">
-                          {hasStock &&
-                          lowestPrice !== null
-                            ? "Starting from"
-                            : "Availability"}
+                    <div className="mt-auto pt-4">
+                      {singleVariant ? (
+                        <p className="text-base font-extrabold text-brand-navy sm:text-xl">
+                          {formatPrice(Number(singleVariant.price))}
                         </p>
-
-                        <div className="mt-0.5 flex flex-col gap-3 sm:mt-1 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="min-w-0 text-sm font-bold text-brand-navy sm:text-lg lg:text-xl">
-                            {hasStock &&
-                            lowestPrice !== null
-                              ? formatPrice(
-                                  lowestPrice
-                                )
-                              : "Out of Stock"}
+                      ) : lowestPrice !== null ? (
+                        <div>
+                          <p className="text-xs text-text-muted">
+                            Starting from
                           </p>
-
-                          <Link
-                            href={`/products/${product.slug}`}
-                            className="hidden min-h-10 shrink-0 items-center justify-center rounded-full bg-brand-navy px-4 text-sm font-bold text-white transition hover:opacity-90 sm:flex"
-                          >
-                            View
-                          </Link>
+                          <p className="text-base font-extrabold text-brand-navy sm:text-xl">
+                            {formatPrice(lowestPrice)}
+                          </p>
                         </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-text-muted">
+                          Price unavailable
+                        </p>
+                      )}
+
+                      <div className="mt-4">
+                        <JSBProductCardAction
+                          productId={product.id}
+                          productName={product.name}
+                          productSlug={product.slug}
+                          variants={variants}
+                          imagePath={imagePath}
+                        />
                       </div>
                     </div>
-                  </article>
-                );
-              }
-            )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
           /* ============================================================

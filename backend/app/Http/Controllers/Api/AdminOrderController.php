@@ -4,16 +4,31 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\Payment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class AdminOrderController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | List All Orders
-    |--------------------------------------------------------------------------
-    */
+    private const TRANSITIONS = [
+        'pending' => ['confirmed', 'cancelled'],
+        'confirmed' => ['processing', 'cancelled'],
+        'processing' => ['out_for_delivery', 'cancelled'],
+        'out_for_delivery' => ['delivered', 'cancelled'],
+        'delivered' => [],
+        'cancelled' => [],
+    ];
+
+    private function loadDetails(Order $order): Order
+    {
+        return $order->load([
+            'items.product.images',
+            'items.variant',
+        ]);
+    }
 
     public function index(): JsonResponse
     {
@@ -31,135 +46,150 @@ class AdminOrderController extends Controller
         ]);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Show One Order
-    |--------------------------------------------------------------------------
-    */
-
     public function show(Order $order): JsonResponse
     {
-        $order->load([
-            'items.product.images',
-            'items.variant',
-        ]);
-
         return response()->json([
             'success' => true,
-            'data' => $order,
+            'data' => $this->loadDetails($order),
         ]);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Update Order
-    |--------------------------------------------------------------------------
-    */
-
-    public function update(
-        Request $request,
-        Order $order
-    ): JsonResponse {
+    public function update(Request $request, Order $order): JsonResponse
+    {
         $validated = $request->validate([
             'order_status' => [
                 'required',
                 'string',
                 'in:pending,confirmed,processing,out_for_delivery,delivered,cancelled',
             ],
-
-            'payment_status' => [
-                'nullable',
-                'string',
-                'in:pending,paid,failed,refunded',
-            ],
+            'payment_status' => ['prohibited'],
         ]);
 
-        $newOrderStatus = $validated['order_status'];
+        $result = DB::transaction(function () use ($order, $validated) {
+            $lockedOrder = Order::query()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $newPaymentStatus =
-            $validated['payment_status']
-            ?? $order->payment_status;
+            $current = $lockedOrder->order_status;
+            $next = $validated['order_status'];
 
-        /*
-        |--------------------------------------------------------------------------
-        | Fields To Update
-        |--------------------------------------------------------------------------
-        */
+            if ($current === $next) {
+                return $lockedOrder;
+            }
 
-        $updates = [
-            'order_status' => $newOrderStatus,
-            'payment_status' => $newPaymentStatus,
-        ];
+            if (! in_array($next, self::TRANSITIONS[$current] ?? [], true)) {
+                throw ValidationException::withMessages([
+                    'order_status' =>
+                        "Cannot change order status from {$current} to {$next}.",
+                ]);
+            }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Order Status Timestamps
-        |--------------------------------------------------------------------------
-        |
-        | We only set a timestamp if it has not already been recorded.
-        |
-        | This preserves the first time that stage was reached.
-        |
-        */
+            $updates = ['order_status' => $next];
 
-        if (
-            $newOrderStatus === 'confirmed'
-            && $order->confirmed_at === null
-        ) {
-            $updates['confirmed_at'] = now();
-        }
+            if ($next === 'confirmed' && ! $lockedOrder->confirmed_at) {
+                $updates['confirmed_at'] = now();
+            }
 
-        if (
-            $newOrderStatus === 'out_for_delivery'
-            && $order->out_for_delivery_at === null
-        ) {
-            $updates['out_for_delivery_at'] = now();
-        }
+            if (
+                $next === 'out_for_delivery' &&
+                ! $lockedOrder->out_for_delivery_at
+            ) {
+                $updates['out_for_delivery_at'] = now();
+            }
 
-        if (
-            $newOrderStatus === 'delivered'
-            && $order->delivered_at === null
-        ) {
-            $updates['delivered_at'] = now();
-        }
+            if ($next === 'delivered' && ! $lockedOrder->delivered_at) {
+                $updates['delivered_at'] = now();
+            }
 
-        if (
-            $newOrderStatus === 'cancelled'
-            && $order->cancelled_at === null
-        ) {
-            $updates['cancelled_at'] = now();
-        }
+            if ($next === 'cancelled' && ! $lockedOrder->cancelled_at) {
+                $updates['cancelled_at'] = now();
+            }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Payment Timestamp
-        |--------------------------------------------------------------------------
-        */
+            $lockedOrder->update($updates);
 
-        if (
-            $newPaymentStatus === 'paid'
-            && $order->paid_at === null
-        ) {
-            $updates['paid_at'] = now();
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Save
-        |--------------------------------------------------------------------------
-        */
-
-        $order->update($updates);
-
-        $order->load([
-            'items.product.images',
-            'items.variant',
-        ]);
+            return $lockedOrder;
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Order updated successfully.',
-            'data' => $order,
+            'message' => 'Order status updated successfully.',
+            'data' => $this->loadDetails($result),
+        ]);
+    }
+
+    public function collectPayment(
+        Request $request,
+        Order $order
+    ): JsonResponse {
+        $request->validate([
+            'confirm_collected' => ['required', 'accepted'],
+        ]);
+
+        $result = DB::transaction(function () use ($order) {
+            $lockedOrder = Order::query()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedOrder->payment_method !== 'cash_on_delivery') {
+                throw ValidationException::withMessages([
+                    'payment' =>
+                        'Only Cash on Delivery payments can be collected manually.',
+                ]);
+            }
+
+            if ($lockedOrder->order_status === 'cancelled') {
+                throw ValidationException::withMessages([
+                    'payment' =>
+                        'Cannot collect payment for a cancelled order.',
+                ]);
+            }
+
+            if ($lockedOrder->payment_status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'payment' =>
+                        'This order is not awaiting a Cash on Delivery payment.',
+                ]);
+            }
+
+            if (
+                Payment::query()
+                    ->where('order_id', $lockedOrder->id)
+                    ->where('status', 'paid')
+                    ->exists()
+            ) {
+                throw ValidationException::withMessages([
+                    'payment' =>
+                        'A successful payment already exists for this order.',
+                ]);
+            }
+
+            $now = now();
+
+            Payment::create([
+                'order_id' => $lockedOrder->id,
+                'method' => 'cash_on_delivery',
+                'amount' => $lockedOrder->total,
+                'transaction_reference' => 'JSB-COD-' . Str::uuid(),
+                'status' => 'paid',
+                'paid_at' => $now,
+                'provider' => 'manual_cod',
+                'currency' => 'UGX',
+            ]);
+
+            $lockedOrder->update([
+                'payment_status' => 'paid',
+                'paid_at' => $now,
+            ]);
+
+            return $lockedOrder;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cash on Delivery payment recorded successfully.',
+            'data' => $this->loadDetails($result),
         ]);
     }
 }

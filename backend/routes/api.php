@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +43,11 @@ Route::post('/orders', [OrderController::class, 'store']);
 Route::post(
     '/orders/customer',
     [OrderController::class, 'customerOrders']
+)->middleware('throttle:10,1');
+
+Route::post(
+    '/orders/confirmation',
+    [OrderController::class, 'confirmationDetails']
 )->middleware('throttle:10,1');
 
 Route::get(
@@ -108,7 +114,7 @@ Route::post('/admin/login', [AdminAuthController::class, 'login']);
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', EnsureAdmin::class])->group(function () {
 
     Route::get('/admin/me', [AdminAuthController::class, 'me']);
 
@@ -131,6 +137,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/orders/{order}', [AdminOrderController::class, 'show']);
 
     Route::put('/admin/orders/{order}', [AdminOrderController::class, 'update']);
+
+    Route::post('/admin/orders/{order}/collect-payment', [AdminOrderController::class, 'collectPayment']);
 
     // Homepage hero slide management
     Route::get('/admin/hero-slides', [AdminHeroSlideController::class, 'index']);

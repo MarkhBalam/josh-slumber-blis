@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ImageIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const API_URL = "http://127.0.0.1:8000";
@@ -552,10 +553,10 @@ export default function AdminHeroSlidesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f6f2] text-[#1f1f1f]">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+    <main className="min-h-screen bg-background text-brand-navy">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {/* Header */}
-        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Link
               href="/admin"
@@ -564,22 +565,22 @@ export default function AdminHeroSlidesPage() {
               ← Admin Dashboard
             </Link>
 
-            <p className="mt-6 text-xs font-bold uppercase tracking-[0.22em] text-[#040D52]">
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy/60 sm:mt-4">
               Homepage Management
             </p>
 
-            <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
+            <h1 className="mt-1 text-[22px] font-bold tracking-tight text-brand-navy sm:mt-1.5 sm:text-3xl">
               Homepage Highlights
             </h1>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">
+            <p className="mt-1.5 max-w-2xl text-xs leading-5 text-slate-500 sm:mt-2 sm:text-sm">
               Upload and manage the images that rotate
               in the right side of the homepage hero.
             </p>
           </div>
 
-          <div className="flex gap-3">
-            <div className="rounded-2xl border border-black/10 bg-white px-5 py-3">
+          <div className="flex gap-2 sm:gap-3">
+            <div className="min-w-20 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:min-w-24 sm:rounded-2xl sm:px-4 sm:py-3">
               <p className="text-xs font-medium text-gray-400">
                 Total
               </p>
@@ -589,7 +590,7 @@ export default function AdminHeroSlidesPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl bg-[#040D52] px-5 py-3 text-white">
+            <div className="min-w-20 rounded-xl bg-brand-navy px-3 py-2 text-white sm:min-w-24 sm:rounded-2xl sm:px-4 sm:py-3">
               <p className="text-xs font-medium text-white/60">
                 Active
               </p>
@@ -615,7 +616,7 @@ export default function AdminHeroSlidesPage() {
         )}
 
         {/* Form */}
-        <section className="mt-8 rounded-3xl border border-black/10 bg-white p-5 sm:p-7 lg:p-8">
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:mt-6 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">
@@ -624,7 +625,7 @@ export default function AdminHeroSlidesPage() {
                   : "New Highlight"}
               </p>
 
-              <h2 className="mt-2 text-2xl font-bold">
+              <h2 className="mt-1 text-lg font-bold text-brand-navy sm:mt-1.5 sm:text-2xl">
                 {editingSlide
                   ? editingSlide.title
                   : "Add homepage image"}
@@ -644,10 +645,10 @@ export default function AdminHeroSlidesPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="mt-7 grid gap-7 lg:grid-cols-[1fr_0.9fr]"
+            className="mt-4 grid min-w-0 gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-6"
           >
             {/* Fields */}
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-3.5 sm:space-y-4">
               <div>
                 <label
                   htmlFor="title"
@@ -657,9 +658,7 @@ export default function AdminHeroSlidesPage() {
                 </label>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  This helps you identify the image in
-                  Admin. It does not have to appear on
-                  the homepage.
+                  For identifying this image in Admin. This title is not shown on the homepage.
                 </p>
 
                 <input
@@ -673,7 +672,7 @@ export default function AdminHeroSlidesPage() {
                     )
                   }
                   placeholder="e.g. Martyrs Day Promotion"
-                  className="mt-3 w-full rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-[#040D52]"
+                  className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#040D52] sm:mt-3 sm:rounded-2xl sm:px-4 sm:py-3.5"
                 />
               </div>
 
@@ -686,9 +685,7 @@ export default function AdminHeroSlidesPage() {
                 </label>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  JPG, PNG or WebP. Maximum size 8 MB.
-                  Use a landscape design for the best
-                  homepage appearance.
+                  JPG, PNG or WebP, up to 8 MB. Landscape images work best.
                 </p>
 
                 <input
@@ -696,7 +693,7 @@ export default function AdminHeroSlidesPage() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handleImageChange}
-                  className="mt-3 block w-full rounded-2xl border border-dashed border-black/20 bg-[#f8f6f2] px-4 py-4 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-[#040D52] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:border-[#040D52]"
+                  className="mt-2 block w-full min-w-0 max-w-full rounded-xl border border-dashed border-slate-300 bg-[#f8f6f2] px-2.5 py-2.5 text-xs text-brand-navy sm:mt-3 sm:px-3 sm:py-3 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-navy file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:border-brand-navy sm:text-sm"
                 />
 
                 {editingSlide && (
@@ -719,8 +716,7 @@ export default function AdminHeroSlidesPage() {
                 </label>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Where the customer should go after
-                  clicking this highlight.
+                  Where customers go when they tap this image.
                 </p>
 
                 <input
@@ -734,7 +730,7 @@ export default function AdminHeroSlidesPage() {
                     )
                   }
                   placeholder="/shop?category=mattresses"
-                  className="mt-3 w-full rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-[#040D52]"
+                  className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#040D52] sm:mt-3 sm:rounded-2xl sm:px-4 sm:py-3.5"
                 />
               </div>
 
@@ -762,7 +758,7 @@ export default function AdminHeroSlidesPage() {
                         event.target.value
                       )
                     }
-                    className="mt-3 w-full rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-[#040D52]"
+                    className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#040D52] sm:mt-3 sm:rounded-2xl sm:px-4 sm:py-3.5"
                   />
                 </div>
 
@@ -815,17 +811,17 @@ export default function AdminHeroSlidesPage() {
               </p>
 
               <p className="mt-1 text-xs leading-5 text-gray-500">
-                The final homepage may crop slightly
-                depending on screen size.
+                Preview your promotional image as it will appear
+                in the homepage carousel.
               </p>
 
               <div className="mt-3 overflow-hidden rounded-3xl border border-black/10 bg-[#f2f1ec]">
-                <div className="relative aspect-[4/3] overflow-hidden bg-[#040D52]">
+                <div className="relative aspect-[1920/620] overflow-hidden bg-brand-navy">
                   {previewUrl ? (
                     <img
                       src={previewUrl}
                       alt="Selected highlight preview"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain"
                     />
                   ) : editingSlide ? (
                     <img
@@ -833,13 +829,17 @@ export default function AdminHeroSlidesPage() {
                         editingSlide.image_path
                       )}
                       alt={editingSlide.title}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center px-8 text-center text-white">
                       <div>
-                        <div className="text-5xl">
-                          🖼️
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
+                          <ImageIcon
+                            size={24}
+                            strokeWidth={1.75}
+                            className="text-white"
+                          />
                         </div>
 
                         <p className="mt-4 text-sm font-semibold">
@@ -889,7 +889,7 @@ export default function AdminHeroSlidesPage() {
                 Current Highlights
               </p>
 
-              <h2 className="mt-2 text-2xl font-bold">
+              <h2 className="mt-1 text-lg font-bold text-brand-navy sm:mt-1.5 sm:text-2xl">
                 Homepage carousel
               </h2>
             </div>
@@ -920,19 +920,19 @@ export default function AdminHeroSlidesPage() {
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {slides.map((slide) => (
                 <article
                   key={slide.id}
-                  className="overflow-hidden rounded-3xl border border-black/10 bg-white"
+                  className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-[#040D52]">
+                  <div className="relative aspect-[1920/620] overflow-hidden bg-brand-navy">
                     <img
                       src={getImageUrl(
                         slide.image_path
                       )}
                       alt={slide.title}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain"
                     />
 
                     <div className="absolute left-3 top-3">
@@ -956,12 +956,12 @@ export default function AdminHeroSlidesPage() {
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <h3 className="text-lg font-bold">
+                  <div className="p-3.5 sm:p-4">
+                    <h3 className="text-sm font-bold text-brand-navy sm:text-base">
                       {slide.title}
                     </h3>
 
-                    <div className="mt-3 rounded-2xl bg-[#f8f6f2] p-3">
+                    <div className="mt-3 rounded-xl bg-[#f8f6f2] p-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">
                         Destination
                       </p>
@@ -972,13 +972,13 @@ export default function AdminHeroSlidesPage() {
                       </p>
                     </div>
 
-                    <div className="mt-5 grid grid-cols-2 gap-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() =>
                           handleEdit(slide)
                         }
-                        className="rounded-xl bg-[#040D52] px-3 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+                        className="rounded-xl bg-brand-navy px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 sm:text-sm"
                       >
                         Edit
                       </button>
@@ -988,7 +988,7 @@ export default function AdminHeroSlidesPage() {
                         onClick={() =>
                           handleToggleActive(slide)
                         }
-                        className="rounded-xl border border-black/10 bg-white px-3 py-3 text-sm font-semibold transition hover:border-[#040D52]"
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-brand-navy transition hover:border-brand-navy sm:text-sm"
                       >
                         {slide.is_active
                           ? "Deactivate"
@@ -1003,7 +1003,7 @@ export default function AdminHeroSlidesPage() {
                         disabled={
                           deletingId === slide.id
                         }
-                        className="col-span-2 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="col-span-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
                       >
                         {deletingId === slide.id
                           ? "Deleting..."

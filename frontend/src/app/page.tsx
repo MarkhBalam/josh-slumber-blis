@@ -1,9 +1,11 @@
+
 import Link from "next/link";
 
 import HeroCarousel, {
   type HeroSlide,
 } from "@/components/HeroCarousel";
 
+import JSBProductCardAction from "@/components/JSBProductCardAction";
 import { getProducts } from "@/lib/api";
 
 const API_URL = "http://127.0.0.1:8000";
@@ -29,11 +31,52 @@ type Product = {
   name: string;
   slug: string;
   brand: string | null;
-  short_description: string | null;
+  description: string | null;
   is_featured: boolean;
+  category: {
+    id: number;
+    parent_id: number | null;
+    slug: string;
+  } | null;
   variants: ProductVariant[];
   images: ProductImage[];
 };
+
+type Category = {
+  id: number;
+  slug: string;
+  children?: Category[];
+};
+
+function collectCategoryIds(category: Category): number[] {
+  return [
+    category.id,
+    ...(category.children ?? []).flatMap(collectCategoryIds),
+  ];
+}
+
+async function getMattressCategoryIds(): Promise<Set<number>> {
+  try {
+    const response = await fetch(
+      `${API_URL}/api/categories`,
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) return new Set();
+
+    const data = await response.json();
+    const categories: Category[] = data.data ?? [];
+    const mattresses = categories.find(
+      (category) => category.slug === "mattresses"
+    );
+
+    return new Set(
+      mattresses ? collectCategoryIds(mattresses) : []
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 function formatPrice(price: string | number) {
   return new Intl.NumberFormat("en-UG", {
@@ -43,26 +86,24 @@ function formatPrice(price: string | number) {
   }).format(Number(price));
 }
 
-function getProductImage(product: Product) {
-  if (!product.images || product.images.length === 0) {
+function getPrimaryImage(product: Product) {
+  if (!product.images?.length) {
     return null;
   }
 
-  const primaryImage =
-    product.images.find(
-      (image) => image.is_primary
-    ) ?? product.images[0];
-
-  return `${API_URL}/storage/${primaryImage.image_path}`;
+  return (
+    product.images.find((image) => image.is_primary) ??
+    [...product.images].sort(
+      (a, b) => a.sort_order - b.sort_order
+    )[0]
+  );
 }
 
 async function getHeroSlides(): Promise<HeroSlide[]> {
   try {
     const response = await fetch(
       `${API_URL}/api/hero-slides`,
-      {
-        cache: "no-store",
-      }
+      { cache: "no-store" }
     );
 
     if (!response.ok) {
@@ -70,7 +111,6 @@ async function getHeroSlides(): Promise<HeroSlide[]> {
     }
 
     const data = await response.json();
-
     return data.data ?? [];
   } catch {
     return [];
@@ -78,14 +118,14 @@ async function getHeroSlides(): Promise<HeroSlide[]> {
 }
 
 export default async function Home() {
-  const [productResponse, heroSlides] =
+  const [productResponse, heroSlides, mattressCategoryIds] =
     await Promise.all([
       getProducts(),
       getHeroSlides(),
+      getMattressCategoryIds(),
     ]);
 
-  const products: Product[] =
-    productResponse.data ?? [];
+  const products: Product[] = productResponse.data ?? [];
 
   const featuredProducts = products.filter(
     (product) => product.is_featured
@@ -98,10 +138,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-background text-text-main">
-      {/* ================================================================
-          COMPACT HOMEPAGE HERO
-      ================================================================= */}
-
+      {/* HERO CAROUSEL */}
       <section className="bg-background">
         <div className="mx-auto max-w-7xl px-3 pt-3 sm:px-5 sm:pt-4 lg:px-6 lg:pt-5">
           <div className="overflow-hidden rounded-[1.25rem] sm:rounded-[1.75rem]">
@@ -110,16 +147,11 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ================================================================
-          FEATURED PRODUCTS
-      ================================================================= */}
-
+      {/* FEATURED PRODUCTS */}
       <section
         id="products"
         className="mx-auto max-w-7xl px-4 pb-14 pt-7 sm:px-6 sm:pb-16 sm:pt-9 lg:px-8 lg:pb-20 lg:pt-10"
       >
-        {/* Section Heading */}
-
         <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-navy/55 sm:text-xs">
@@ -141,58 +173,66 @@ export default async function Home() {
           </Link>
         </div>
 
-        {/* Products */}
-
         {homepageProducts.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:gap-6">
             {homepageProducts.map((product) => {
-              const availablePrices =
-                product.variants
-                  .filter(
-                    (variant) =>
-                      variant.stock_status ===
-                      "in_stock"
-                  )
-                  .map((variant) =>
-                    Number(variant.price)
-                  );
+              const variants = product.variants ?? [];
+              const isSingleSize = variants.length === 1;
+              const singleVariant = isSingleSize
+                ? variants[0]
+                : null;
+
+              const availablePrices = variants
+                .filter(
+                  (variant) =>
+                    variant.stock_status === "in_stock"
+                )
+                .map((variant) => Number(variant.price))
+                .filter(Number.isFinite);
 
               const lowestPrice =
                 availablePrices.length > 0
-                  ? Math.min(
-                      ...availablePrices
-                    )
+                  ? Math.min(...availablePrices)
                   : null;
 
-              const hasStock =
-                product.variants.some(
-                  (variant) =>
-                    variant.stock_status ===
-                    "in_stock"
-                );
+              const hasStock = variants.some(
+                (variant) =>
+                  variant.stock_status === "in_stock"
+              );
 
-              const productImage =
-                getProductImage(product);
+              const primaryImage = getPrimaryImage(product);
 
-              const primaryImage =
-                product.images?.find(
-                  (image) => image.is_primary
-                ) ?? product.images?.[0];
+              const imagePath =
+                primaryImage?.image_path ?? null;
+
+              const imageUrl = imagePath
+                ? `${API_URL}/storage/${imagePath}`
+                : null;
+
+              const isMattress =
+                product.category !== null &&
+                mattressCategoryIds.has(product.category.id);
+
+              const sizeLabel = singleVariant
+                ? singleVariant.size_label ||
+                  singleVariant.label
+                : null;
+
+              const description = product.description?.trim();
 
               return (
                 <article
                   key={product.id}
-                  className="group overflow-hidden rounded-2xl border border-border-soft bg-surface transition duration-300 sm:rounded-[1.5rem] lg:hover:-translate-y-1 lg:hover:shadow-xl"
+                  className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border-soft bg-surface transition duration-300 sm:rounded-[1.5rem] lg:hover:-translate-y-1 lg:hover:shadow-xl"
                 >
-                  {/* Product Image */}
-
+                  {/* PRODUCT IMAGE */}
                   <Link
                     href={`/products/${product.slug}`}
                     className="relative block aspect-square overflow-hidden bg-surface-soft sm:aspect-[4/3]"
                   >
-                    {productImage ? (
+                    {imageUrl ? (
                       <img
-                        src={productImage}
+                        src={imageUrl}
                         alt={
                           primaryImage?.alt_text ??
                           product.name
@@ -207,12 +247,6 @@ export default async function Home() {
                       </div>
                     )}
 
-                    {product.is_featured && (
-                      <span className="absolute left-2 top-2 rounded-full bg-brand-yellow px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-brand-navy shadow-sm sm:left-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-[10px]">
-                        Featured
-                      </span>
-                    )}
-
                     {!hasStock && (
                       <span className="absolute right-2 top-2 rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-danger shadow-sm sm:right-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-[10px]">
                         Out of Stock
@@ -220,52 +254,59 @@ export default async function Home() {
                     )}
                   </Link>
 
-                  {/* Product Details */}
-
-                  <div className="p-3 sm:p-5 lg:p-6">
-                    {product.brand && (
-                      <p className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted sm:block sm:text-xs">
-                        {product.brand}
-                      </p>
-                    )}
-
+                  {/* PRODUCT INFORMATION */}
+                  <div className="flex flex-1 flex-col p-3 sm:p-5 lg:p-6">
                     <Link
                       href={`/products/${product.slug}`}
+                      className="block"
                     >
-                      <h3 className="line-clamp-2 text-sm font-bold leading-snug text-brand-navy sm:mt-2 sm:text-lg lg:text-xl">
+                      <h3 className="line-clamp-2 text-sm font-bold leading-snug text-brand-navy sm:text-lg lg:text-xl">
                         {product.name}
                       </h3>
                     </Link>
 
-                    <p className="mt-2 hidden line-clamp-2 min-h-11 text-sm leading-6 text-text-muted md:block">
-                      {product.short_description ??
-                        "Quality bedroom essential from Josh Slumber Blis."}
-                    </p>
-
-                    <div className="mt-3 border-t border-border-soft pt-3 sm:mt-5 sm:pt-4">
-                      <p className="hidden text-xs text-text-muted sm:block">
-                        {hasStock &&
-                        lowestPrice !== null
-                          ? "Starting from"
-                          : "Availability"}
+                    {/* MATTRESS SIZE OR ADMIN PRODUCT DESCRIPTION */}
+                    {isMattress && isSingleSize && sizeLabel &&
+                      sizeLabel.toLowerCase() !== "standard" ? (
+                      <p className="mt-2 text-xs font-medium text-text-muted sm:text-sm">
+                        Size: {sizeLabel}
                       </p>
+                    ) : !isMattress && description ? (
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-text-muted sm:text-sm">
+                        {description}
+                      </p>
+                    ) : null}
 
-                      <div className="mt-0.5 flex flex-col gap-3 sm:mt-1 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm font-bold text-brand-navy sm:text-lg lg:text-xl">
-                          {hasStock &&
-                          lowestPrice !== null
-                            ? formatPrice(
-                                lowestPrice
-                              )
-                            : "Out of Stock"}
+                    {/* EXACT PRICE */}
+                    <div className="mt-auto pt-4">
+                      {singleVariant ? (
+                        <p className="text-base font-extrabold text-brand-navy sm:text-xl">
+                          {formatPrice(singleVariant.price)}
                         </p>
+                      ) : lowestPrice !== null ? (
+                        <div>
+                          <p className="text-xs text-text-muted">
+                            Starting from
+                          </p>
+                          <p className="text-base font-extrabold text-brand-navy sm:text-xl">
+                            {formatPrice(lowestPrice)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-text-muted">
+                          Price unavailable
+                        </p>
+                      )}
 
-                        <Link
-                          href={`/products/${product.slug}`}
-                          className="hidden min-h-10 shrink-0 items-center justify-center rounded-full bg-brand-navy px-4 text-sm font-bold text-white transition hover:opacity-90 sm:flex"
-                        >
-                          View
-                        </Link>
+                      {/* CART ACTION */}
+                      <div className="mt-4">
+                        <JSBProductCardAction
+                          productId={product.id}
+                          productName={product.name}
+                          productSlug={product.slug}
+                          variants={variants}
+                          imagePath={imagePath}
+                        />
                       </div>
                     </div>
                   </div>
@@ -275,17 +316,15 @@ export default async function Home() {
           </div>
         ) : (
           <div className="rounded-3xl border border-border-soft bg-surface px-5 py-14 text-center sm:px-6 sm:py-16">
-            <div className="text-5xl">
-              🛏️
-            </div>
+            <div className="text-5xl">🛏️</div>
 
             <h3 className="mt-5 text-2xl font-bold text-brand-navy">
               Products coming soon
             </h3>
 
             <p className="mt-2 text-text-muted">
-              Products added through the admin
-              dashboard will appear here.
+              Products added through the admin dashboard
+              will appear here.
             </p>
           </div>
         )}
@@ -300,17 +339,13 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ================================================================
-          SHOP REASSURANCE
-      ================================================================= */}
-
+      {/* SHOP REASSURANCE */}
       <section className="border-y border-border-soft bg-surface">
         <div className="mx-auto grid max-w-7xl grid-cols-3 divide-x divide-border-soft px-2 sm:px-6 lg:px-8">
           <div className="px-2 py-5 text-center sm:px-5 sm:py-6">
             <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-brand-yellow text-sm font-black text-brand-navy">
               ✓
             </div>
-
             <p className="mt-2 text-xs font-bold text-brand-navy sm:text-sm">
               Quality Products
             </p>
@@ -320,7 +355,6 @@ export default async function Home() {
             <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-brand-yellow text-sm font-black text-brand-navy">
               ↔
             </div>
-
             <p className="mt-2 text-xs font-bold text-brand-navy sm:text-sm">
               Multiple Sizes
             </p>
@@ -330,7 +364,6 @@ export default async function Home() {
             <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-brand-yellow text-sm font-black text-brand-navy">
               ✓
             </div>
-
             <p className="mt-2 text-xs font-bold text-brand-navy sm:text-sm">
               Delivery Available
             </p>
@@ -338,10 +371,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ================================================================
-          CTA
-      ================================================================= */}
-
+      {/* BOTTOM CTA */}
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="relative overflow-hidden rounded-[1.75rem] bg-brand-navy px-5 py-10 text-center text-white sm:rounded-[2rem] sm:px-10 sm:py-14 md:px-16">
           <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand-yellow sm:h-40 sm:w-40" />

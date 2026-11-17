@@ -17,11 +17,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Josh Slumber Blis",
-    template: "%s | Josh Slumber Blis",
+    default: "Josh Slumber Bliss",
+    template: "%s | Josh Slumber Bliss",
   },
   description:
-    "Shop mattresses, pillows, duvets, bedsheets and bedroom essentials from Josh Slumber Blis.",
+    "Shop mattresses, pillows, duvets, bedsheets and bedroom essentials from Josh Slumber Bliss.",
 };
 
 export default function RootLayout({

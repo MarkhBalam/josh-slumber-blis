@@ -124,7 +124,7 @@ class AdminProductController extends Controller
             'variants' => [
                 'required',
                 'array',
-                'min:1',
+                'size:1',
             ],
 
             'variants.*.label' => [

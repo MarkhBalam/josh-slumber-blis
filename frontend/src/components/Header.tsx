@@ -202,7 +202,7 @@ export default function Header() {
               >
                 <img
                   src="/josh balam logo.png"
-                  alt="Josh Slumber Blis"
+                  alt="Josh Slumber Bliss"
                   className="h-auto w-[150px] object-contain"
                 />
               </Link>
@@ -262,7 +262,7 @@ export default function Header() {
               >
                 <img
                   src="/josh balam logo.png"
-                  alt="Josh Slumber Blis"
+                  alt="Josh Slumber Bliss"
                   className="h-auto w-[115px] object-contain sm:w-[135px]"
                 />
               </Link>
@@ -365,7 +365,7 @@ export default function Header() {
                 <div className="flex w-[145px] items-center">
                   <img
                     src="/josh balam logo.png"
-                    alt="Josh Slumber Blis"
+                    alt="Josh Slumber Bliss"
                     className="h-auto w-full object-contain"
                   />
                 </div>
